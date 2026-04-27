@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model assets {
+  id                 Int                      @id @default(autoincrement())
+  name               String                   @db.VarChar(255)
+  serial_number      String?                  @unique(map: "serial_number") @db.VarChar(100)
+  status             assets_status?           @default(Available)
+  current_location   assets_current_location? @default(TechSupport)
+  reservations       reservations[]
+  transactionhistory transactionhistory[]
+}
+
+model reservations {
+  id                 Int                  @id @default(autoincrement())
+  user_id            Int?
+  asset_id           Int?
+  start_time         DateTime?            @db.DateTime(0)
+  end_time           DateTime?            @db.DateTime(0)
+  status             reservations_status? @default(Reserved)
+  verification_token String?              @db.VarChar(64)
+  users              users?               @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "reservations_ibfk_1")
+  assets             assets?              @relation(fields: [asset_id], references: [id], onDelete: Cascade, onUpdate: Restrict, map: "reservations_ibfk_2")
+
+  @@index([asset_id], map: "asset_id")
+  @@index([user_id], map: "user_id")
+}
+
+model transactionhistory {
+  id               Int                        @id @default(autoincrement())
+  asset_id         Int?
+  user_id          Int?
+  action           transactionhistory_action?
+  actual_timestamp DateTime?                  @default(now()) @db.DateTime(0)
+  assets           assets?                    @relation(fields: [asset_id], references: [id], onUpdate: Restrict, map: "transactionhistory_ibfk_1")
+  users            users?                     @relation(fields: [user_id], references: [id], onUpdate: Restrict, map: "transactionhistory_ibfk_2")
+
+  @@index([asset_id], map: "asset_id")
+  @@index([user_id], map: "user_id")
+}
+
+model users {
+  id                 Int                  @id @default(autoincrement())
+  email              String               @unique(map: "email") @db.VarChar(255)
+  password_hash      String               @db.VarChar(255)
+  full_name          String?              @db.VarChar(255)
+  role               users_role?          @default(student)
+  reservations       reservations[]
+  transactionhistory transactionhistory[]
+}
+
+enum assets_status {
+  Available
+  Reserved
+  Assigned
+}
+
+enum transactionhistory_action {
+  Reserved
+  HandedOver
+  Returned
+  Expired
+  Cancelled
+}
+
+enum assets_current_location {
+  Department
+  TechSupport
+}
+
+enum users_role {
+  student
+  lecturer
+  admin
+  staff
+}
+
+enum reservations_status {
+  Reserved
+  Assigned
+}
