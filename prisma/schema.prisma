@@ -1,14 +1,16 @@
-generator client {
-  provider = "prisma-client-js"
-}
-
 datasource db {
   provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
 }
 
 model assets {
   id                 Int                      @id @default(autoincrement())
   name               String                   @db.VarChar(255)
+  model              String                   @db.VarChar(255) // Ավելացրու սա
   serial_number      String?                  @unique(map: "serial_number") @db.VarChar(100)
   status             assets_status?           @default(Available)
   current_location   assets_current_location? @default(TechSupport)
