@@ -5,7 +5,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 
-// Ժամանակի փոխակերպում UTC-ի՝ շփոթմունքներից խուսափելու համար
+/**
+ * Օգնող ֆունկցիա՝ ամսաթիվը UTC ձևաչափի բերելու համար
+ */
 const parseToUTC = (isoString: string) => {
   const date = new Date(isoString);
   return new Date(Date.UTC(
@@ -17,33 +19,92 @@ const parseToUTC = (isoString: string) => {
   ));
 };
 
-export async function getReservations() {
+// --- ԱԴՄԻՆԻ ՖՈՒՆԿՑԻԱՆԵՐ ---
+
+/**
+ * Բերում է միայն 'staff' դեր ունեցող օգտատերերին
+ */
+export async function getStaffUsers() {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || !session.user) return [];
+    const user = session?.user as any;
+    if (!session || user?.role !== 'admin') return [];
 
-    // Ստուգում ենք՝ արդյոք օգտատերը ադմին է
-    const isAdmin = (session.user as any).role === 'admin';
-
-    // Եթե ադմին է, where-ը դատարկ է (բերում է բոլորը), եթե ոչ՝ ֆիլտրում ենք user_id-ով
-    const whereClause = isAdmin ? {} : { user_id: parseInt(session.user.id) };
-
-    const reservations = await prisma.reservations.findMany({
-      where: whereClause,
-      include: { 
-        assets: true, 
-        users: true // Սա անհրաժեշտ է, որ ադմինի էջում ամրագրողի անունը երևա
-      },
-      orderBy: { start_time: 'desc' },
+    return await prisma.users.findMany({
+      where: { role: 'staff' },
+      select: { id: true, full_name: true },
+      orderBy: { full_name: 'asc' }
     });
-    
-    return reservations;
   } catch (error) {
-    console.error("Error fetching reservations:", error);
-    throw new Error("Ամրագրումները չհաջողվեց բեռնել։");
+    console.error("Error fetching staff users:", error);
+    return [];
   }
 }
 
+/**
+ * Ադմինի կողմից սարքի անժամկետ կցում աշխատակցին
+ */
+export async function createPermanentAssignment(data: {
+  assetId: number;
+  userId: number;
+  start_time: string;
+}) {
+  try {
+    const session = await getServerSession(authOptions);
+    const adminUser = session?.user as any;
+
+    if (!session || adminUser?.role !== 'admin') {
+      throw new Error("Այս գործողությունը թույլատրված է միայն ադմինին։");
+    }
+
+    const newStartTime = parseToUTC(data.start_time);
+
+    const result = await prisma.$transaction(async (tx) => {
+      const conflict = await tx.reservations.findFirst({
+        where: {
+          asset_id: data.assetId,
+          status: { in: ["Reserved", "Assigned"] },
+          AND: [
+            { OR: [{ end_time: { gt: newStartTime } }, { end_time: null }] }
+          ]
+        }
+      });
+
+      if (conflict) {
+        throw new Error("Այս սարքը ներկայումս զբաղված է կամ արդեն կցված է մեկ այլ անձի։");
+      }
+
+      const reservation = await tx.reservations.create({
+        data: {
+          asset_id: data.assetId,
+          user_id: data.userId,
+          start_time: newStartTime,
+          end_time: null,
+          status: 'Assigned',
+        },
+      });
+
+      await tx.assets.update({
+        where: { id: data.assetId },
+        data: { status: 'Assigned' },
+      });
+
+      return reservation;
+    });
+
+    revalidatePath('/admin/reservations');
+    revalidatePath('/myreservations');
+    return { success: true, data: result };
+  } catch (error: any) {
+    throw new Error(error.message || "Անժամկետ կցումը ձախողվեց։");
+  }
+}
+
+// --- ՀԻՄՆԱԿԱՆ ՖՈՒՆԿՑԻԱՆԵՐ ---
+
+/**
+ * Ստեղծում է ամրագրում (ժամանակավոր կամ անժամկետ)
+ */
 export async function createReservation(data: {
   assetId: string;
   start_time: string;
@@ -51,33 +112,25 @@ export async function createReservation(data: {
 }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
-      throw new Error("Դուք մուտք գործած չեք։");
-    }
+    if (!session?.user) throw new Error("Դուք մուտք գործած չեք։");
 
+    const user = session.user as any;
     const requestedAssetId = parseInt(data.assetId);
     
-    // 1. Ստանում ենք ընտրված սարքի տվյալները (որպեսզի իմանանք սարքի տեսակը/անունը)
-    const requestedAsset = await prisma.assets.findUnique({
-      where: { id: requestedAssetId },
-    });
-
+    const requestedAsset = await prisma.assets.findUnique({ where: { id: requestedAssetId } });
     if (!requestedAsset) throw new Error("Սարքը չի գտնվել։");
 
     const newStartTime = parseToUTC(data.start_time);
-    const newEndTime = data.end_time ? parseToUTC(data.end_time) : new Date("9999-12-31");
+    const newEndTime = data.end_time ? parseToUTC(data.end_time) : new Date("2099-12-31");
 
-    // 2. Տրանզակցիա՝ սարք գտնելու և ամրագրելու համար
     const result = await prisma.$transaction(async (tx) => {
-      
-      // Փնտրում ենք ազատ սարք նույն անունով
       const availableAsset = await tx.assets.findFirst({
         where: {
-          name: requestedAsset.name, // Փնտրում ենք նույն տեսակի սարքեր
+          name: requestedAsset.name,
           NOT: {
-            reservations: {
+            reservations: { 
               some: {
-                // Եթե կա ամրագրում, որը հատվում է մեր նշած ժամերի հետ
+                status: { in: ['Reserved', 'Assigned'] },
                 AND: [
                   { start_time: { lt: newEndTime } },
                   { OR: [{ end_time: { gt: newStartTime } }, { end_time: null }] }
@@ -89,25 +142,22 @@ export async function createReservation(data: {
       });
 
       if (!availableAsset) {
-        throw new Error(`Ներողություն, բոլոր «${requestedAsset.name}» տեսակի սարքերը զբաղված են այդ ժամանակահատվածում։`);
+        throw new Error(`Ներողություն, բոլոր «${requestedAsset.name}» տեսակի սարքերը զբաղված են։`);
       }
 
-      // Ամրագրում ենք այն սարքը, որը գտանք (կամ նույնը, կամ ուրիշ ազատը)
-      const status = data.end_time === null ? "Assigned" : "Reserved";
+      const isPermanent = data.end_time === null;
 
       const reservation = await tx.reservations.create({
         data: {
           asset_id: availableAsset.id,
-          user_id: parseInt(session.user.id),
+          user_id: parseInt(user.id),
           start_time: newStartTime,
-          end_time: data.end_time ? newEndTime : null,
-          status: status,
-          verification_token: Math.random().toString(36).substring(7),
+          end_time: isPermanent ? null : newEndTime,
+          status: isPermanent ? 'Assigned' : 'Reserved',
         },
       });
-
-      // Եթե անժամկետ է, թարմացնում ենք սարքի ստատուսը
-      if (data.end_time === null) {
+      
+      if (isPermanent) {
         await tx.assets.update({
           where: { id: availableAsset.id },
           data: { status: 'Assigned' },
@@ -118,29 +168,99 @@ export async function createReservation(data: {
     });
 
     revalidatePath('/myreservations');
+    revalidatePath('/admin/reservations');
     return { success: true, data: result };
 
   } catch (error: any) {
-    console.error("Reservation Error:", error);
     throw new Error(error.message || "Ամրագրումը ձախողվեց։");
   }
 }
 
+/**
+ * Ջնջում է ամրագրումը և ազատում սարքը
+ */
 export async function deleteReservation(id: number) {
-  const session = await getServerSession(authOptions);
-  if (!session || !session.user) {
-    throw new Error("Դուք մուտք գործած չեք");
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) throw new Error("Մուտք գործած չեք");
+
+    const user = session.user as any;
+    
+    const reservation = await prisma.reservations.findUnique({ 
+      where: { id: id } 
+    });
+
+    if (!reservation) return;
+
+    if (reservation.user_id !== parseInt(user.id) && user.role !== 'admin') {
+      throw new Error("Իրավասություն չունեք");
+    }
+
+    if (reservation.asset_id !== null) {
+      const assetIdToUpdate: number = reservation.asset_id;
+
+      await prisma.$transaction([
+        prisma.reservations.delete({ where: { id: id } }),
+        prisma.assets.update({
+          where: { id: assetIdToUpdate },
+          data: { status: 'Available' }
+        })
+      ]);
+    } else {
+      await prisma.reservations.delete({ where: { id: id } });
+    }
+
+    revalidatePath('/myreservations'); 
+    revalidatePath('/admin/reservations');
+  } catch (error: any) {
+    console.error("Delete Error:", error.message);
+    throw error;
   }
+}
 
-  const reservation = await prisma.reservations.findUnique({ where: { id } });
-  
-  if (reservation?.user_id !== parseInt(session.user.id)) {
-    throw new Error("Դուք իրավունք չունեք ջնջել այս ամրագրումը");
+export async function getReservations() {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user) return [];
+
+    const user = session.user as any;
+    const currentUserId = parseInt(user.id);
+
+    if (isNaN(currentUserId)) return [];
+
+    const whereClause = user.role === 'admin' ? {} : { user_id: currentUserId };
+
+    return await prisma.reservations.findMany({
+      where: whereClause,
+      include: { 
+        assets: true, 
+        users: { select: { id: true, full_name: true, phone_number: true } }   
+      },
+      orderBy: { start_time: 'desc' },
+    });
+  } catch (error) {
+    console.error("Error fetching reservations:", error);
+    return [];
   }
+}
 
-  await prisma.reservations.delete({
-    where: { id },
-  });
+export async function getAssets() {
+  try {
+    return await prisma.assets.findMany({ orderBy: { name: 'asc' } });
+  } catch (error) {
+    return [];
+  }
+}
 
-  revalidatePath('/myreservations'); 
+export async function getUniqueAssetNames() {
+  try {
+    const assets = await prisma.assets.findMany({
+      distinct: ['name'],
+      select: { name: true },
+      orderBy: { name: 'asc' }
+    });
+    return assets.map(a => a.name);
+  } catch (error) {
+    return [];
+  }
 }

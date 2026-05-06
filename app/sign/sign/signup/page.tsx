@@ -1,7 +1,7 @@
 'use client'
 import { useActionState } from 'react';
 import { registerUser } from "@/app/actions/auth";
-import Link from 'next/link'; // 1. Ավելացրել ենք Link-ի import-ը
+import Link from 'next/link';
 
 export default function SignupPage() {
   const [state, formAction] = useActionState(registerUser, null);
@@ -11,30 +11,64 @@ export default function SignupPage() {
       <h1 className="text-2xl font-bold mb-6">Գրանցում</h1>
       
       <form action={formAction} className="flex flex-col gap-4 w-80">
-        <input name="email" type="email" placeholder="Էլ-փոստ" required className="border p-2 rounded" />
-        <input name="password" type="password" placeholder="Գաղտնաբառ" required className="border p-2 rounded" />
+        {/* Անուն Ազգանուն */}
+        <input 
+          name="full_name" 
+          type="text" 
+          placeholder="Անուն Ազգանուն" 
+          required 
+          className="border p-2 rounded focus:outline-blue-500" 
+        />
+
+        {/* Հեռախոսահամար */}
+        <input 
+          name="phone_number" 
+          type="tel" 
+          placeholder="Հեռախոսահամար" 
+          required 
+          className="border p-2 rounded focus:outline-blue-500" 
+        />
+
+        {/* Էլ-փոստ */}
+        <input 
+          name="email" 
+          type="email" 
+          placeholder="Էլ-փոստ" 
+          required 
+          className="border p-2 rounded focus:outline-blue-500" 
+        />
+
+        {/* Գաղտնաբառ */}
+        <input 
+          name="password" 
+          type="password" 
+          placeholder="Գաղտնաբառ" 
+          required 
+          className="border p-2 rounded focus:outline-blue-500" 
+        />
         
-        <select name="role" className="border p-2 rounded">
+        {/* Դեր (Role) */}
+        <select name="role" className="border p-2 rounded focus:outline-blue-500 bg-white">
           <option value="student">Ուսանող</option>
           <option value="lecturer">Դասախոս</option>
           <option value="staff">Վարչական աշխատող</option>
         </select>
         
-        <button type="submit" className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 transition">
+        <button type="submit" className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 transition font-medium">
           Գրանցվել
         </button>
       </form>
 
-      {/* 2. Ավելացրել ենք վերադարձի հղումը */}
+      {/* Վերադարձի հղում */}
       <div className="mt-4">
         <Link href="/sign/sign/login" className="text-sm text-gray-500 hover:text-blue-600 underline">
-          ← Վերադառնալ
+          ← Արդեն ունե՞ք հաշիվ։ Մուտք գործել
         </Link>
       </div>
 
-      {/* Ցույց ենք տալիս արդյունքը */}
+      {/* Հաղորդագրություն սերվերից */}
       {state && (
-        <p className={`mt-4 ${state.success ? 'text-green-600' : 'text-red-600'}`}>
+        <p className={`mt-4 text-sm font-medium ${state.success ? 'text-green-600' : 'text-red-600'}`}>
           {state.message}
         </p>
       )}

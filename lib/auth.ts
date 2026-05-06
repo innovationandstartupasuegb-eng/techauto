@@ -1,7 +1,8 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import { prisma } from "@/lib/prisma"; // Համոզվիր, որ ճիշտ ես իմպորտ արել prisma-ն
-console.log("SECRET CHECK:", process.env.NEXTAUTH_SECRET);
+import { prisma } from "@/lib/prisma";
+import bcrypt from "bcrypt"; // 1. Անպայման ներմուծիր bcrypt-ը
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -18,35 +19,31 @@ export const authOptions: NextAuthOptions = {
           where: { email: credentials.email },
         });
 
-        // 2. Ստուգում ենք՝ արդյոք կա այդպիսի user և գաղտնաբառը ճիշտ է
-        // (Իրական նախագծում օգտագործիր bcrypt.compare, սա պարզ օրինակ է)
-        if (user && user.password_hash === credentials.password) {
-          return {
-            id: user.id.toString(),
-            email: user.email,
-            role: user.role, // Այստեղ մենք ստանում ենք դերը բազայից
-          };
-        }
-        return null;
+        if (!user) return null;
+
+        // 2. ՈՒՂՂՈՒՄ. Համեմատում ենք հեշավորված գաղտնաբառերը bcrypt-ի միջոցով
+        const isPasswordValid = await bcrypt.compare(
+          credentials.password,
+          user.password_hash
+        );
+
+        if (!isPasswordValid) return null;
+
+        // 3. Եթե ամեն ինչ ճիշտ է, վերադարձնում ենք user-ին
+        return {
+          id: user.id.toString(),
+          email: user.email,
+          name: user.full_name, // Ավելացրու նաև անունը
+          role: user.role,
+        };
       }
     })
   ],
-cookies: {
-    sessionToken: {
-      name: `next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-        secure: process.env.NODE_ENV === 'production', // Թող լինի false, եթե development է
-      },
-    },
-  },
+  // Cookies-ի հատվածը կարող ես թողնել նույնը կամ հեռացնել, եթե default-ը հերիքում է
   session: {
-    strategy: "jwt", // Սա շատ կարևոր է Server Actions-ի համար
+    strategy: "jwt",
   },
   callbacks: {
-    // 3. JWT-ի մեջ ավելացնում ենք role-ը
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
@@ -54,15 +51,16 @@ cookies: {
       }
       return token;
     },
-    // 4. Սեսիայի մեջ ավելացնում ենք role-ը, որ հասանելի լինի ամենուր
     async session({ session, token }) {
       if (session.user) {
-        session.user.id = token.id as string;
-        session.user.role = token.role as any; 
+        (session.user as any).id = token.id as string;
+        (session.user as any).role = token.role as any; 
       }
       return session;
     },
   },
-  
   secret: process.env.NEXTAUTH_SECRET,
+  pages: {
+    signIn: "/sign/sign/login", // Նշիր քո լոգինի էջի ճիշտ հասցեն
+  }
 };

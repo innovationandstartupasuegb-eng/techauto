@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -6,10 +6,15 @@ import { createReservation } from "@/app/actions/reservation";
 
 interface ReservePageProps {
   assets: any[];
-  isAdmin: boolean;
+  canIndefinite: boolean; 
+  isActualAdmin: boolean; 
 }
 
-export default function ReservePage({ assets = [], isAdmin = false }: ReservePageProps) {
+export default function ReservePage({ 
+  assets = [], 
+  canIndefinite = false, 
+  isActualAdmin = false 
+}: ReservePageProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -18,26 +23,44 @@ export default function ReservePage({ assets = [], isAdmin = false }: ReservePag
     assetId: "",
     date: "",
     startTime: "09:00",
-    endTime: "09:30",
-    isIndefinite: false
+    endTime: "09:20"
   });
 
-  const timeSlots = useMemo(() => {
+  // 1. Սկզբի ժամերը (09:00, 09:30 ... մինչև 17:00)
+  const startTimeSlots = useMemo(() => {
     const slots = [];
-    for (let h = 9; h < 18; h++) {
+    for (let h = 9; h <= 17; h++) {
       const hour = h.toString().padStart(2, '0');
-      slots.push(`${hour}:00`, `${hour}:30`);
+      slots.push(`${hour}:00`);
+      if (h < 17) {
+        slots.push(`${hour}:30`);
+      }
     }
     return slots;
   }, []);
 
-  const availableEndTimes = timeSlots.filter(time => time > formData.startTime);
+  // 2. Ավարտի ժամերը (09:20, 09:50 ... մինչև 17:20)
+  const endTimeSlots = useMemo(() => {
+    const slots = [];
+    for (let h = 9; h <= 17; h++) {
+      const hour = h.toString().padStart(2, '0');
+      slots.push(`${hour}:20`);
+      if (h < 17) {
+        slots.push(`${hour}:50`);
+      }
+    }
+    return slots;
+  }, []);
+
+  // 3. Ֆիլտրում ենք ավարտի ժամերը՝ ըստ ընտրված սկզբի
+  const availableEndTimes = useMemo(() => {
+    return endTimeSlots.filter(time => time > formData.startTime);
+  }, [formData.startTime, endTimeSlots]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.date) {
-      setMessage("❌ Խնդրում եմ ընտրեք ամսաթիվը։");
+    if (!formData.date || !formData.assetId || !formData.endTime) {
+      setMessage("❌ Խնդրում եմ լրացնել բոլոր դաշտերը։");
       return;
     }
 
@@ -46,7 +69,7 @@ export default function ReservePage({ assets = [], isAdmin = false }: ReservePag
 
     try {
       const startDateTime = `${formData.date}T${formData.startTime}:00`;
-      const endDateTime = formData.isIndefinite ? null : `${formData.date}T${formData.endTime}:00`;
+      const endDateTime = `${formData.date}T${formData.endTime}:00`;
 
       await createReservation({
         assetId: formData.assetId,
@@ -56,15 +79,14 @@ export default function ReservePage({ assets = [], isAdmin = false }: ReservePag
 
       setMessage("✅ Ամրագրումը հաջողությամբ կատարվեց");
       
-      // ՈՒՂՂՈՒՄ. Դինամիկ ուղղորդում՝ կախված ադմին լինելուց
-      const destination = isAdmin ? '/admin' : '/dashboard';
+      const destination = isActualAdmin ? '/admin' : '/myreservations'; 
       
       setTimeout(() => {
         router.push(destination);
       }, 2000);
 
     } catch (err: any) {
-      setMessage("❌ Սխալ՝ " + (err.message || "Տեղի ունեցավ սխալ։"));
+      setMessage("❌ " + (err.message || "Տեղի ունեցավ սխալ։"));
     } finally {
       setLoading(false);
     }
@@ -75,7 +97,11 @@ export default function ReservePage({ assets = [], isAdmin = false }: ReservePag
       <h1 className="text-2xl font-bold text-gray-800 mb-6">Ամրագրել տեխնիկա</h1>
       
       {message && (
-        <div className={`p-4 mb-6 text-center rounded-lg font-medium border ${message.includes('✅') ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+        <div className={`p-4 mb-6 text-center rounded-lg font-medium border ${
+          message.includes('✅') 
+            ? 'bg-green-50 text-green-700 border-green-200' 
+            : 'bg-red-50 text-red-700 border-red-200'
+        }`}>
           {message}
         </div>
       )}
@@ -85,7 +111,7 @@ export default function ReservePage({ assets = [], isAdmin = false }: ReservePag
           <label className="block text-sm font-medium text-gray-700 mb-1">Սարքը</label>
           <select 
             required
-            className="w-full p-3 border border-gray-300 rounded-lg"
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
             onChange={(e) => setFormData({...formData, assetId: e.target.value})}
             value={formData.assetId}
           >
@@ -101,7 +127,7 @@ export default function ReservePage({ assets = [], isAdmin = false }: ReservePag
           <input 
             required
             type="date"
-            className="w-full p-3 border border-gray-300 rounded-lg"
+            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
             value={formData.date}
             onChange={(e) => setFormData({...formData, date: e.target.value})}
           />
@@ -110,20 +136,19 @@ export default function ReservePage({ assets = [], isAdmin = false }: ReservePag
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Սկիզբ</label>
-            <select className="w-full p-3 border border-gray-300 rounded-lg" 
+            <select className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
               onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
               value={formData.startTime}
             >
-              {timeSlots.map(t => <option key={t} value={t}>{t}</option>)}
+              {startTimeSlots.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Ավարտ</label>
             <select 
-              required={!formData.isIndefinite}
-              disabled={formData.isIndefinite}
-              className={`w-full p-3 border border-gray-300 rounded-lg ${formData.isIndefinite ? 'bg-gray-100' : ''}`}
+              required
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               onChange={(e) => setFormData({...formData, endTime: e.target.value})}
               value={formData.endTime}
             >
@@ -133,22 +158,10 @@ export default function ReservePage({ assets = [], isAdmin = false }: ReservePag
           </div>
         </div>
 
-        {isAdmin && (
-          <div className="flex items-center gap-2 py-2">
-            <input 
-              type="checkbox" 
-              className="w-4 h-4"
-              onChange={(e) => setFormData({...formData, isIndefinite: e.target.checked})}
-              checked={formData.isIndefinite}
-            />
-            <label className="text-sm text-gray-600">Անժամկետ ամրագրում</label>
-          </div>
-        )}
-
         <button 
           disabled={loading}
           type="submit" 
-          className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
+          className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition disabled:bg-blue-400"
         >
           {loading ? "Կատարվում է..." : "Հաստատել ամրագրումը"}
         </button>

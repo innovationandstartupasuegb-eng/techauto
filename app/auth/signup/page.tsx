@@ -15,6 +15,8 @@ export default function SignupPage() {
       <form action={formAction} className="flex flex-col gap-4 w-80">
         <input name="email" type="email" placeholder="Էլ-փոստ" required className="border p-2" />
         <input name="password" type="password" placeholder="Գաղտնաբառ" required className="border p-2" />
+        <input name="full_name" placeholder="Անուն Ազգանուն" className="border p-2 rounded" required />
+        <input name="phone_number" type="tel" placeholder="Հեռախոսահամար" className="border p-2 rounded" required />
         
         <select name="role" className="border p-2">
           <option value="STUDENT">Ուսանող</option>

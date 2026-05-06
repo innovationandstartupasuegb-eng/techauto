@@ -8,7 +8,7 @@ export default function UserDashboard() {
 
   return (
     <div className="p-8 flex flex-col items-center justify-center min-h-screen bg-gray-50">
-      <h1 className="text-2xl font-bold text-gray-800 mb-8">Բարի գալուստ, Անահի՛տ</h1>
+      <h1 className="text-2xl font-bold text-gray-800 mb-8">Բարի գալուստ</h1>
       
       <div className="flex flex-col items-center gap-6 w-full max-w-md">
         {menuItems.map((item) => (
