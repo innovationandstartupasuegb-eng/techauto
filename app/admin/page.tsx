@@ -1,8 +1,10 @@
 import Link from 'next/link'; 
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
-import ManageClient from "@/components/ManageClient"; // Այս @"-ը կապ չունի որտեղ ես, միշտ կաշխատի
+import ManageClient from "@/components/ManageClient";
 import { prisma } from "@/lib/prisma";
+// 1. Ներմուծիր քո Modal կոմպոնենտը
+import AdminNotificationModal from "@/components/AdminNotificationModal"; 
 
 export default function AdminDashboard() {
   const menuItems = [
@@ -13,7 +15,9 @@ export default function AdminDashboard() {
 
   return (
     <div className="p-8 flex flex-col items-center justify-center min-h-screen">
-      {/* max-w-md-ով սահմանափակում ենք լայնությունը, որ չձգվեն էկրանով մեկ */}
+      {/* 2. Տեղադրիր Modal-ը այստեղ: Այն տեսանելի չի լինի, քանի դեռ ազդակ չի ստացել */}
+      <AdminNotificationModal />
+
       <div className="flex flex-col items-center gap-6 w-full max-w-md">
         {menuItems.map((item) => (
           <Link href={item.path} key={item.title} className="w-full">

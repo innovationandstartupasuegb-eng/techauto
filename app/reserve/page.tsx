@@ -2,38 +2,39 @@ import ReservePage from "@/components/ReservePage";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { redirect } from "next/navigation";
 
 export default async function Page() {
   const session = await getServerSession(authOptions);
   
-  // Ստուգում ենք սեսիան և դերը
-  const user = session?.user as any;
-  const userRole = user?.role;
+  // Եթե օգտատերը մուտք չի գործել, վերահասցեավորում ենք login էջ
+  if (!session?.user) {
+    redirect("/auth/signin"); // կամ քո login էջի հասցեն
+  }
 
-  // 1. canIndefinite - ով կարող է անժամկետ վերցնել
+  const user = session.user as { id: string; role: string };
+  const userRole = user.role;
+
+  // Իրավասությունների ստուգում
   const canIndefinite = userRole === 'admin' || userRole === 'staff';
-
-  // 2. isActualAdmin - արդյոք ադմին է
   const isActualAdmin = userRole === 'admin';
 
-  // Վերցնում ենք սարքերը
-  const allAssets = await prisma.assets.findMany();
-  
-  // Ֆիլտրում ենք, որպեսզի նույնանուն սարքերը չկրկնվեն ցուցակում
-  const uniqueAssetsMap = new Map();
-  allAssets.forEach(asset => {
-    if (!uniqueAssetsMap.has(asset.name)) {
-      uniqueAssetsMap.set(asset.name, asset);
-    }
+  // 1. Վերցնում ենք ԲՈԼՈՐ սարքերը բազայից
+  const allAssets = await prisma.assets.findMany({
+    orderBy: { name: 'asc' }
   });
 
-  const uniqueAssets = Array.from(uniqueAssetsMap.values());
+  // 2. Ստեղծում ենք եզակի ԱՆՈՒՆՆԵՐՈՎ ցուցակ (առաջին dropdown-ի համար)
+  // map-ով վերցնում ենք միայն այն սարքերը, որոնց անունն առաջին անգամ է հանդիպում
+  const uniqueAssetTypes = allAssets.filter((asset, index, self) =>
+    index === self.findIndex((t) => t.name === asset.name)
+  );
 
   return (
     <div className="container mx-auto p-4">
-      {/* Վերնագիրը հեռացված է այստեղից */}
       <ReservePage 
-        assets={uniqueAssets} 
+        assets={uniqueAssetTypes} 
+        allAssets={allAssets}     
         canIndefinite={canIndefinite} 
         isActualAdmin={isActualAdmin} 
       />

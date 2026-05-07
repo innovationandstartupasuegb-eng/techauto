@@ -29,7 +29,8 @@ model reservations {
   user_id    Int?
   start_time DateTime?
   end_time   DateTime?
-  status     assets_status?       
+  status     assets_status?    
+  pickupStatus PickupStatus @default(PENDING)   
 
   assets      assets?   @relation(fields: [asset_id], references: [id])
   users       users?    @relation(fields: [user_id], references: [id])
@@ -89,4 +90,12 @@ enum users_role {
   lecturer
   admin
   staff
+}
+
+enum PickupStatus {
+  PENDING      // Սկզբնական վիճակ, երբ նոր է ամրագրվել
+  USER_READY   // Օգտատերը սեղմել է «Վերցնել» (ադմինի դռան մոտ է)
+  IN_USE       // Ադմինը հաստատել է հանձնումը
+  RETURN_REQUESTED
+  RETURNED     // Վերադարձված է (եթե հետագայում վերադարձի վալիդացիան էլ ավելացնես)
 }
