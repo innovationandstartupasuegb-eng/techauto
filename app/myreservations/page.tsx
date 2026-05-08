@@ -9,6 +9,7 @@ export default async function MyReservationsPage() {
     const d = new Date(date);
     if (d.getFullYear() > 9000) return "— անժամկետ —";
 
+    // Օգտագործում ենք UTC մեթոդները, որպեսզի JS-ը չավելացնի տեղական +4 շեղումը
     const day = d.getUTCDate().toString().padStart(2, '0');
     const month = (d.getUTCMonth() + 1).toString().padStart(2, '0');
     const year = d.getUTCFullYear();

@@ -9,37 +9,32 @@ datasource db {
 }
 
 model assets {
-  id                 Int                  @id @default(autoincrement())
-  name               String               @db.VarChar(255)
-  model              String               @db.VarChar(255)
-  serial_number      String?              @unique(map: "serial_number") @db.VarChar(100)
-  status             assets_status?       @default(Available)
+  id                 Int                      @id @default(autoincrement())
+  name               String                   @db.VarChar(255)
+  model              String                   @db.VarChar(255)
+  serial_number      String?                  @unique(map: "serial_number") @db.VarChar(100)
+  status             assets_status?           @default(Available)
   current_location   assets_current_location? @default(TechSupport)
-  
-  // Կապերը (Relations) - կոդում կլինեն reservations և transactionhistory
   reservations       reservations[]
   transactionhistory transactionhistory[]
 
-  @@map("assets") // Համոզվում ենք, որ բազայում փոքրատառ է
+  @@map("assets")
 }
 
 model reservations {
-  id         Int       @id @default(autoincrement())
-  asset_id   Int?
-  user_id    Int?
-  start_time DateTime?
-  end_time   DateTime?
-  status     assets_status?    
-  pickupStatus PickupStatus @default(PENDING)   
-
-  assets      assets?   @relation(fields: [asset_id], references: [id])
-  users       users?    @relation(fields: [user_id], references: [id])
+  id           Int            @id @default(autoincrement())
+  asset_id     Int?
+  user_id      Int?
+  start_time   DateTime?
+  end_time     DateTime?
+  status       assets_status?
+  pickupStatus PickupStatus   @default(PENDING)
+  assets       assets?        @relation(fields: [asset_id], references: [id])
+  users        users?         @relation(fields: [user_id], references: [id])
 
   @@index([asset_id], map: "reservation_asset_id_idx")
   @@index([user_id], map: "reservation_user_id_idx")
-
-  // ՍԱ ԿԱՐԵՎՈՐ Է. Եթե բազայում անունը մեծատառ Reservations է, գրիր այստեղ
-  @@map("reservations") 
+  @@map("reservations")
 }
 
 model transactionhistory {
@@ -48,14 +43,11 @@ model transactionhistory {
   user_id          Int?
   action           String?
   actual_timestamp DateTime? @default(now())
-
-  assets            assets?   @relation(fields: [asset_id], references: [id])
-  users             users?    @relation(fields: [user_id], references: [id])
+  assets           assets?   @relation(fields: [asset_id], references: [id])
+  users            users?    @relation(fields: [user_id], references: [id])
 
   @@index([asset_id], map: "transaction_asset_id_idx")
   @@index([user_id], map: "transaction_user_id_idx")
-
-  // Եթե բազայում TransactionHistory է
   @@map("transactionH=history")
 }
 
@@ -66,14 +58,12 @@ model users {
   full_name          String?              @db.VarChar(255)
   phone_number       String?              @db.VarChar(255)
   role               users_role?          @default(student)
-  
   reservations       reservations[]
   transactionhistory transactionhistory[]
 
   @@map("users")
 }
 
-// --- Enums (թողնում ենք նույնը) ---
 enum assets_status {
   Available
   Reserved
@@ -93,10 +83,10 @@ enum users_role {
 }
 
 enum PickupStatus {
-  PENDING      // Սկզբնական վիճակ, երբ նոր է ամրագրվել
-  USER_READY   // Օգտատերը սեղմել է «Վերցնել» (ադմինի դռան մոտ է)
-  IN_USE       // Ադմինը հաստատել է հանձնումը
+  PENDING
+  USER_READY
+  IN_USE
+  RETURNED
   RETURN_REQUESTED
-  RETURNED     // Վերադարձված է (եթե հետագայում վերադարձի վալիդացիան էլ ավելացնես)
   CANCELLED
 }

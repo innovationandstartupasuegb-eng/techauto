@@ -174,21 +174,32 @@ export async function createReservation(data: {
 
     const user = session.user as any;
     
-    const newStartTime = parseToUTC(data.start_time);
-    const newEndTime = data.end_time ? parseToUTC(data.end_time) : new Date("2099-12-31T23:59:59Z");
+    // 1. Ստեղծում ենք ժամանակավոր Date օբյեկտներ՝ ստուգման համար
+    const checkStartTime = new Date(data.start_time);
+    const checkEndTime = data.end_time ? new Date(data.end_time) : null;
+
+    // 2. ՍՏՈՒԳՈՒՄ (Անում ենք սա նախքան 4 ժամ ավելացնելը)
+    if (data.end_time && checkEndTime) {
+      const limit = new Date(checkStartTime);
+      limit.setHours(17, 20, 0, 0); 
+      
+      if (checkEndTime > limit) {
+        throw new Error("Ամրագրումը հնարավոր է միայն մինչև ժամը 17:20։");
+      }
+    }
+
+    // 3. Պատրաստում ենք վերջնական ժամերը բազայի համար (UTC+4 ուղղումով)
+    const offset = 4 * 60 * 60 * 1000; 
+    const newStartTime = new Date(checkStartTime.getTime() + offset);
+    const newEndTime = data.end_time 
+      ? new Date(checkEndTime!.getTime() + offset) 
+      : new Date("2099-12-31T23:59:59Z");
 
     if (isNaN(newStartTime.getTime()) || (data.end_time && isNaN(newEndTime.getTime()))) {
       throw new Error("Ամսաթվի ձևաչափը սխալ է։");
     }
 
-    if (data.end_time) {
-      const limit = new Date(newStartTime);
-      limit.setUTCHours(17, 20, 0, 0); 
-      if (newEndTime > limit) {
-        throw new Error("Ամրագրումը հնարավոր է միայն մինչև ժամը 17:20։");
-      }
-    }
-
+    // --- ՄՆԱՑԱԾԸ ՄՆՈՒՄ Է ԱՆՓՈՓՈԽ ---
     const result = await prisma.$transaction(async (tx: any) => {
       let targetAssetId: number;
 
@@ -239,7 +250,7 @@ export async function createReservation(data: {
         data: {
           asset_id: targetAssetId,
           user_id: parseInt(user.id),
-          start_time: newStartTime,
+          start_time: newStartTime, 
           end_time: isPermanent ? null : newEndTime,
           status: isPermanent ? 'Assigned' : 'Reserved',
           pickupStatus: 'PENDING', 
@@ -265,6 +276,7 @@ export async function createReservation(data: {
   }
 }
 
+
 export async function deleteReservation(id: number) {
   try {
     const session = await getServerSession(authOptions);
@@ -276,28 +288,34 @@ export async function deleteReservation(id: number) {
       where: { id: id } 
     });
 
-    if (!reservation) return;
+    if (!reservation) return { success: false, error: "Ամրագրումը չի գտնվել" };
 
     if (reservation.user_id !== parseInt(user.id) && user.role !== 'admin') {
       throw new Error("Իրավասություն չունեք");
     }
 
-    if (reservation.asset_id !== null) {
-      const assetIdToUpdate = reservation.asset_id;
+    // Օգտագործում ենք տրանզակցիա, որպեսզի թե՛ ջնջվի, թե՛ սարքը ազատվի միաժամանակ
+    await prisma.$transaction(async (tx) => {
+      // 1. Ջնջում ենք ամրագրումը
+      await tx.reservations.delete({ 
+        where: { id: id } 
+      });
 
-      await prisma.$transaction([
-        prisma.reservations.delete({ where: { id: id } }),
-        prisma.assets.update({
-          where: { id: assetIdToUpdate },
+      // 2. Եթե ամրագրումը կապված էր սարքի հետ, սարքը սարքում ենք Available
+      if (reservation.asset_id) {
+        await tx.assets.update({
+          where: { id: reservation.asset_id },
           data: { status: 'Available' }
-        })
-      ]);
-    } else {
-      await prisma.reservations.delete({ where: { id: id } });
-    }
+        });
+      }
+    });
 
+    // ԿԱՐԵՎՈՐ: revalidatePath-ը պետք է կանչվի տրանզակցիայից ԴՈՒՐՍ
     revalidatePath('/myreservations'); 
     revalidatePath('/admin/reservations');
+    revalidatePath('/reserve'); // Ավելացրու սա, որ ամրագրման էջն էլ թարմանա
+    
+    return { success: true };
   } catch (error: any) {
     console.error("Delete Error:", error.message);
     throw error;
@@ -396,45 +414,43 @@ export async function confirmReturn(reservationId: number) {
 
 export async function cleanupExpiredReservations() {
   try {
-    const thirtyMinutesAgo = new Date();
-    thirtyMinutesAgo.setMinutes(thirtyMinutesAgo.getMinutes() - 30);
+    // 1. Ստանում ենք սերվերի UTC ժամը և դարձնում Հայաստանի ժամ (+4)
+    const now = new Date();
+    const armeniaTimeMs = now.getTime() + (4 * 60 * 60 * 1000);
+    
+    // 2. Սահմանում ենք 30 րոպե առաջվա շեմը
+    const expirationLimit = new Date(armeniaTimeMs - (30 * 60 * 1000));
 
     const expiredReservations = await prisma.reservations.findMany({
       where: {
         status: 'Reserved',
         pickupStatus: 'PENDING',
         start_time: {
-          lt: thirtyMinutesAgo
+          lt: expirationLimit // Ստուգում ենք ուղղված ժամով
         }
       }
     });
 
     if (expiredReservations.length > 0) {
+      const reservationIds = expiredReservations.map(r => r.id);
       const assetIds = expiredReservations
         .map(r => r.asset_id)
         .filter((id): id is number => id !== null);
 
       await prisma.$transaction([
         prisma.reservations.updateMany({
-          where: {
-            id: { in: expiredReservations.map(r => r.id) }
-          },
+          where: { id: { in: reservationIds } },
           data: {
             pickupStatus: 'CANCELLED',
             status: 'Available' 
           }
         }),
         prisma.assets.updateMany({
-          where: {
-            id: { in: assetIds }
-          },
-          data: {
-            status: 'Available'
-          }
+          where: { id: { in: assetIds } },
+          data: { status: 'Available' }
         })
       ]);
     }
-        
   } catch (error) {
     console.error("Cleanup error:", error);
   }
