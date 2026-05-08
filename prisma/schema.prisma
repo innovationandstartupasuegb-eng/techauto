@@ -98,4 +98,5 @@ enum PickupStatus {
   IN_USE       // Ադմինը հաստատել է հանձնումը
   RETURN_REQUESTED
   RETURNED     // Վերադարձված է (եթե հետագայում վերադարձի վալիդացիան էլ ավելացնես)
+  CANCELLED
 }

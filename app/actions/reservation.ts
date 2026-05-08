@@ -4,22 +4,18 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { Prisma } from "@prisma/client";
 
 /**
- * Օգնող ֆունկցիա՝ ամսաթիվը UTC ձևաչափի բերելու համար
+ * Օգնող ֆունկցիա՝ ամսաթիվը UTC ձևաչափի բերելու համար։
+ * Հեռացրել ենք ստիպողաբար 'Z' ավելացնելը, որպեսզի JS-ը ճիշտ հասկանա տեղական ժամը։
  */
 const parseToUTC = (isoString: string) => {
   if (!isoString) return new Date("Invalid");
-  const cleanIso = isoString.endsWith('Z') ? isoString : `${isoString}Z`;
-  return new Date(cleanIso);
+  return new Date(isoString);
 };
 
-// --- ՆՈՐ ԱՎԵԼԱՑՎԱԾ։ ՍՏԱՑՄԱՆ ՎԱԼԻԴԱՑԻԱՅԻ ՖՈՒՆԿՑԻԱՆԵՐ ---
+// --- ՎԱԼԻԴԱՑԻԱՅԻ ՖՈՒՆԿՑԻԱՆԵՐ ---
 
-/**
- * Օգտատերը հայտնում է, որ պատրաստ է վերցնել սարքը
- */
 export async function requestPickup(reservationId: number) {
   try {
     const session = await getServerSession(authOptions);
@@ -37,23 +33,25 @@ export async function requestPickup(reservationId: number) {
   }
 }
 
-/**
- * Ադմինը հաստատում է սարքի ֆիզիկական հանձնումը
- */
+export async function getAssets() {
+  try {
+    return await prisma.assets.findMany({ 
+      orderBy: { 
+        name: 'asc' 
+      } 
+    });
+  } catch (error) {
+    console.error("Error fetching assets:", error);
+    return [];
+  }
+}
+
 export async function confirmAdminHandover(reservationId: number) {
   try {
-    // Թարմացնում ենք միայն ամրագրումը (Reservation)
     await prisma.reservations.update({
       where: { id: reservationId },
-      data: {
-        // Սա ցույց է տալիս, որ սարքը ֆիզիկապես հանձնվել է
-        pickupStatus: 'IN_USE', 
-      },
+      data: { pickupStatus: 'IN_USE' },
     });
-
-    // Մենք ՉԵՆՔ փոխում Ակտիվի (Asset) status-ը 'Assigned'-ի,
-    // որովհետև ըստ քո կանոնի՝ Assigned-ը միայն անժամկետների համար է։
-    // Այն կմնա 'Reserved' (կամ ինչպես կար մինչ այդ)։
 
     revalidatePath('/admin/reservations');
     revalidatePath('/myreservations');
@@ -65,10 +63,6 @@ export async function confirmAdminHandover(reservationId: number) {
   }
 }
 
-
-/**
- * Բերում է տվյալ սարքի ամրագրված ժամերը տվյալ օրվա համար (մինչև 17:20)
- */
 export async function getAvailableSlots(assetId: number, dateString: string) {
   try {
     const reservations = await prisma.reservations.findMany({
@@ -148,6 +142,7 @@ export async function createPermanentAssignment(data: {
           start_time: newStartTime,
           end_time: null,
           status: 'Assigned',
+          pickupStatus: 'IN_USE'
         },
       });
 
@@ -182,7 +177,7 @@ export async function createReservation(data: {
     const newStartTime = parseToUTC(data.start_time);
     const newEndTime = data.end_time ? parseToUTC(data.end_time) : new Date("2099-12-31T23:59:59Z");
 
-    if (isNaN(newStartTime.getTime()) || isNaN(newEndTime.getTime())) {
+    if (isNaN(newStartTime.getTime()) || (data.end_time && isNaN(newEndTime.getTime()))) {
       throw new Error("Ամսաթվի ձևաչափը սխալ է։");
     }
 
@@ -247,7 +242,7 @@ export async function createReservation(data: {
           start_time: newStartTime,
           end_time: isPermanent ? null : newEndTime,
           status: isPermanent ? 'Assigned' : 'Reserved',
-          pickup_status: 'PENDING', // Ապահովության համար նախնական արժեքը
+          pickupStatus: 'PENDING', 
         },
       });
       
@@ -288,7 +283,7 @@ export async function deleteReservation(id: number) {
     }
 
     if (reservation.asset_id !== null) {
-      const assetIdToUpdate: number = reservation.asset_id;
+      const assetIdToUpdate = reservation.asset_id;
 
       await prisma.$transaction([
         prisma.reservations.delete({ where: { id: id } }),
@@ -314,10 +309,9 @@ export async function getReservations() {
     const session = await getServerSession(authOptions);
     if (!session?.user) return [];
 
+    await cleanupExpiredReservations(); 
     const user = session.user as any;
     const currentUserId = parseInt(user.id);
-
-    if (isNaN(currentUserId)) return [];
 
     const whereClause = user.role === 'admin' ? {} : { user_id: currentUserId };
 
@@ -335,14 +329,6 @@ export async function getReservations() {
   }
 }
 
-export async function getAssets() {
-  try {
-    return await prisma.assets.findMany({ orderBy: { name: 'asc' } });
-  } catch (error) {
-    return [];
-  }
-}
-
 export async function getUniqueAssetNames() {
   try {
     const assets = await prisma.assets.findMany({
@@ -356,10 +342,6 @@ export async function getUniqueAssetNames() {
   }
 }
 
-
-/**
- * Օգտատերը հայտնում է, որ ուզում է վերադարձնել սարքը
- */
 export async function requestReturn(reservationId: number) {
   try {
     const session = await getServerSession(authOptions);
@@ -367,7 +349,7 @@ export async function requestReturn(reservationId: number) {
 
     await prisma.reservations.update({
       where: { id: reservationId },
-      data: { pickupStatus: 'RETURN_REQUESTED' } // Նոր կարգավիճակ հարցման համար
+      data: { pickupStatus: 'RETURN_REQUESTED' }
     });
     
     revalidatePath('/myreservations');
@@ -377,9 +359,6 @@ export async function requestReturn(reservationId: number) {
   }
 }
 
-/**
- * Ադմինը հաստատում է սարքի ֆիզիկական ստացումը և ազատում է սարքը
- */
 export async function confirmReturn(reservationId: number) {
   try {
     const reservation = await prisma.reservations.findUnique({
@@ -389,15 +368,14 @@ export async function confirmReturn(reservationId: number) {
     if (!reservation) throw new Error("Ամրագրումը չի գտնվել");
 
     await prisma.$transaction([
-      // 1. Թարմացնում ենք ամրագրման կարգավիճակը
       prisma.reservations.update({
         where: { id: reservationId },
         data: { 
           pickupStatus: 'RETURNED',
-          status: 'Available' // Եթե քո status enum-ում կա այսպիսի դաշտ
+          // Փոխում ենք ստատուսը 'Returned', որպեսզի այն այլևս չերևա որպես զբաղված սլոթ
+          status: 'Available' 
         }
       }),
-      // 2. Ազատում ենք սարքը (Asset), որպեսզի ուրիշները կարողանան ամրագրել
       prisma.assets.update({
         where: { id: reservation.asset_id! },
         data: { status: 'Available' }
@@ -411,5 +389,53 @@ export async function confirmReturn(reservationId: number) {
   } catch (error: any) {
     console.error("Վերադարձի հաստատման սխալ:", error);
     return { success: false, error: "Չհաջողվեց հաստատել վերադարձը" };
+  }
+}
+
+// ... (նախորդ կոդը մնում է նույնը մինչև cleanupExpiredReservations ֆունկցիան)
+
+export async function cleanupExpiredReservations() {
+  try {
+    const thirtyMinutesAgo = new Date();
+    thirtyMinutesAgo.setMinutes(thirtyMinutesAgo.getMinutes() - 30);
+
+    const expiredReservations = await prisma.reservations.findMany({
+      where: {
+        status: 'Reserved',
+        pickupStatus: 'PENDING',
+        start_time: {
+          lt: thirtyMinutesAgo
+        }
+      }
+    });
+
+    if (expiredReservations.length > 0) {
+      const assetIds = expiredReservations
+        .map(r => r.asset_id)
+        .filter((id): id is number => id !== null);
+
+      await prisma.$transaction([
+        prisma.reservations.updateMany({
+          where: {
+            id: { in: expiredReservations.map(r => r.id) }
+          },
+          data: {
+            pickupStatus: 'CANCELLED',
+            status: 'Available' 
+          }
+        }),
+        prisma.assets.updateMany({
+          where: {
+            id: { in: assetIds }
+          },
+          data: {
+            status: 'Available'
+          }
+        })
+      ]);
+    }
+        
+  } catch (error) {
+    console.error("Cleanup error:", error);
   }
 }
