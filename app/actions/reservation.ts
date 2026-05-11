@@ -65,14 +65,27 @@ export async function confirmAdminHandover(reservationId: number) {
 
 export async function getAvailableSlots(assetId: number, dateString: string) {
   try {
+    const startOfDay = new Date(`${dateString}T00:00:00.000Z`);
+    const endOfDay = new Date(`${dateString}T23:59:59.999Z`);
+
     const reservations = await prisma.reservations.findMany({
       where: {
         asset_id: assetId,
         status: { in: ['Reserved', 'Assigned'] },
-        start_time: { 
-          gte: new Date(`${dateString}T00:00:00.000Z`),
-          lte: new Date(`${dateString}T23:59:59.999Z`)
-        }
+        OR: [
+          // 1. Սովորական ամրագրումներ, որոնք ինչ-որ կերպ հատվում են այս օրվա հետ
+          {
+            AND: [
+              { start_time: { lte: endOfDay } },
+              { 
+                OR: [
+                  { end_time: { gte: startOfDay } },
+                  { end_time: null } // Սա ընդգրկում է անժամկետները
+                ] 
+              }
+            ]
+          }
+        ]
       },
       orderBy: { start_time: 'asc' }
     });
@@ -322,18 +335,45 @@ export async function deleteReservation(id: number) {
   }
 }
 
-export async function getReservations() {
+export async function getReservations(type: 'active' | 'permanent' | 'archive' = 'active') {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) return [];
 
-    await cleanupExpiredReservations(); 
-    const user = session.user as any;
-    const currentUserId = parseInt(user.id);
+    const userRole = (session.user as any).role;
+    // Դարձնում ենք թիվ, որպեսզի Prisma-ն չբողոքի
+    const userId = parseInt((session.user as any).id);
 
-    const whereClause = user.role === 'admin' ? {} : { user_id: currentUserId };
+    if (isNaN(userId)) {
+      console.error("Invalid User ID format");
+      return [];
+    }
 
-    return await prisma.reservations.findMany({
+    await cleanupExpiredReservations();
+
+    let whereClause: any = {};
+
+    // Եթե ադմին չէ, ֆիլտրում ենք ըստ իր ID-ի
+    if (userRole !== 'admin') {
+      whereClause.user_id = userId; // Հիմա սա արդեն թիվ է (Int)
+    }
+
+    // Մնացած ֆիլտրերը...
+    switch (type) {
+      case 'active':
+        whereClause.status = 'Reserved';
+        whereClause.pickupStatus = { notIn: ['RETURNED', 'CANCELLED'] };
+        break;
+      case 'permanent':
+        whereClause.status = 'Assigned';
+        whereClause.pickupStatus = { not: 'RETURNED' };
+        break;
+      case 'archive':
+        whereClause.pickupStatus = { in: ['RETURNED', 'CANCELLED'] };
+        break;
+    }
+
+    const data = await prisma.reservations.findMany({
       where: whereClause,
       include: { 
         assets: true, 
@@ -341,11 +381,14 @@ export async function getReservations() {
       },
       orderBy: { start_time: 'desc' },
     });
+
+    return data;
   } catch (error) {
-    console.error("Error fetching reservations:", error);
+    console.error("getReservations error:", error);
     return [];
   }
 }
+
 
 export async function getUniqueAssetNames() {
   try {
@@ -414,20 +457,29 @@ export async function confirmReturn(reservationId: number) {
 
 export async function cleanupExpiredReservations() {
   try {
-    // 1. Ստանում ենք սերվերի UTC ժամը և դարձնում Հայաստանի ժամ (+4)
     const now = new Date();
-    const armeniaTimeMs = now.getTime() + (4 * 60 * 60 * 1000);
     
-    // 2. Սահմանում ենք 30 րոպե առաջվա շեմը
-    const expirationLimit = new Date(armeniaTimeMs - (30 * 60 * 1000));
+    // Շեմը՝ 30 րոպե սկզբից անցած
+    const startThreshold = new Date(now.getTime() - (30 * 60 * 1000));
 
     const expiredReservations = await prisma.reservations.findMany({
       where: {
         status: 'Reserved',
         pickupStatus: 'PENDING',
-        start_time: {
-          lt: expirationLimit // Ստուգում ենք ուղղված ժամով
-        }
+        OR: [
+          {
+            // Պայման 1: Ավարտի ժամը անցել է
+            end_time: {
+              lt: now
+            }
+          },
+          {
+            // Պայման 2: Սկզբից անցել է 30 րոպե, բայց դեռ չի վերցվել
+            start_time: {
+              lt: startThreshold
+            }
+          }
+        ]
       }
     });
 
@@ -442,7 +494,7 @@ export async function cleanupExpiredReservations() {
           where: { id: { in: reservationIds } },
           data: {
             pickupStatus: 'CANCELLED',
-            status: 'Available' 
+            status: 'Cancelled' 
           }
         }),
         prisma.assets.updateMany({
@@ -450,6 +502,8 @@ export async function cleanupExpiredReservations() {
           data: { status: 'Available' }
         })
       ]);
+      
+      console.log(`Cleanup: ${expiredReservations.length} գործարք չեղարկվեց:`);
     }
   } catch (error) {
     console.error("Cleanup error:", error);
