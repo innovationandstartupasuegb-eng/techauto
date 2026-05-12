@@ -2,7 +2,7 @@ import { getReservations, deleteReservation } from "@/app/actions/reservation";
 import PickupButton from "@/app/myreservations/PickupButton";
 
 export default async function MyReservationsPage() {
-  const reservations = await getReservations();
+  const reservations = await getReservations('all');
 
   const formatDateTime = (date: Date | string | null) => {
     if (!date) return "-";
@@ -20,24 +20,26 @@ export default async function MyReservationsPage() {
   };
 
   return (
-    <div className="p-8">
+    <div className="p-8 bg-gray-50 min-h-screen">
       <h1 className="text-2xl font-bold mb-6 text-gray-800">Իմ ամրագրումները</h1>
       
       {reservations.length === 0 ? (
-        <p className="text-gray-500 font-medium">Դեռևս ամրագրումներ չկան։</p>
+        <p className="text-gray-500 font-medium bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          Դեռևս ամրագրումներ չկան։
+        </p>
       ) : (
         <div className="bg-white shadow-md rounded-xl overflow-hidden border border-gray-200">
           <table className="min-w-full table-fixed divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="w-1/4 px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase italic">Սարք</th>
-                <th className="w-1/4 px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase italic">Սկիզբ</th>
-                <th className="w-1/4 px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase italic">Ավարտ</th>
-                <th className="w-1/6 px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase italic">Կարգավիճակ</th>
-                <th className="w-1/6 px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase italic">Գործողություն</th>
+                <th className="w-1/4 px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Սարք</th>
+                <th className="w-1/4 px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Սկիզբ</th>
+                <th className="w-1/4 px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Ավարտ</th>
+                <th className="w-1/6 px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Կարգավիճակ</th>
+                <th className="w-1/6 px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Գործողություն</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white divide-y divide-gray-200 text-black">
               {reservations.map((res) => (
                 <tr key={res.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -54,6 +56,7 @@ export default async function MyReservationsPage() {
                   </td>
                   
                   <td className="px-6 py-4 whitespace-nowrap text-center">
+                    {/* PickupButton-ը կառավարում է "Ստացել եմ" և "Վերադարձնել" կոճակները */}
                     <PickupButton 
                       resId={res.id} 
                       startTime={res.start_time!} 
@@ -62,7 +65,8 @@ export default async function MyReservationsPage() {
                   </td>
 
                   <td className="px-6 py-4 whitespace-nowrap text-right">
-                    {(res as any).pickupStatus === 'PENDING' && (
+                    {/* Չեղարկել կոճակը երևում է միայն PENDING վիճակում գտնվող սովորական (Reserved) հայտերի համար */}
+                    {res.status === 'Reserved' && (res as any).pickupStatus === 'PENDING' && (
                       <form action={async () => {
                         "use server";
                         await deleteReservation(res.id);
@@ -75,6 +79,7 @@ export default async function MyReservationsPage() {
                         </button>
                       </form>
                     )}
+                    {/* Անժամկետի դեպքում (Assigned) այստեղ կոճակ չի լինի, քանի որ աշխատողը պետք է օգտվի "Վերադարձնել"-ից */}
                   </td>
                 </tr>
               ))}

@@ -16,38 +16,30 @@ export default function PickupButton({
   const [isExpired, setIsExpired] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Ստուգում ենք՝ արդյոք սա անժամկետ (assigned) ամրագրում է
+  const isPermanent = new Date(startTime).getUTCFullYear() > 9000;
+
   useEffect(() => {
     const checkTime = () => {
-      const now = new Date();
-      
-      // 1. Ստեղծում ենք բազայի ժամի օբյեկտը
-      const s = new Date(startTime);
+      // Եթե անժամկետ է, ժամանակային սահմանափակում չկա
+      if (isPermanent) {
+        setCanPickup(true);
+        return;
+      }
 
-      // 2. Քանի որ բազայում ժամը արդեն +4 է, մենք վերցնում ենք 
-      // դրա UTC թվերը (տարի, ամիս, օր, ժամ, րոպե) և սարքում տեղական Date:
-      // Սա չեզոքացնում է բոլոր տեսակի timezone-ի շեղումները։
-      const pureStart = new Date(
-        s.getUTCFullYear(),
-        s.getUTCMonth(),
-        s.getUTCDate(),
-        s.getUTCHours(),
-        s.getUTCMinutes()
-      );
+      const now = new Date();
+      const s = new Date(startTime);
+      const pureStart = new Date(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate(), s.getUTCHours(), s.getUTCMinutes());
 
       const nowMs = now.getTime();
       const startMs = pureStart.getTime();
-      const expirationMs = startMs + (30 * 60 * 1000); // +30 րոպե
+      const expirationMs = startMs + (30 * 60 * 1000); // 30 րոպե
 
-      // --- ՏՐԱՄԱԲԱՆՈՒԹՅՈՒՆ ---
-
-      // Եթե ներկա պահը անցել է սկիզբ + 30 րոպեն
       if (nowMs > expirationMs && pickupStatus === 'PENDING') {
         setIsExpired(true);
         setCanPickup(false);
       } else {
         setIsExpired(false);
-        // Կարելի է վերցնել, եթե հիմա գոնե սկսվելու ժամն է (կամ 1ր շուտ)
-        // ԵՎ դեռ 30 րոպեն չի լրացել
         const isTimeArrived = nowMs >= (startMs - 60000);
         const isStillValid = nowMs <= expirationMs;
         setCanPickup(isTimeArrived && isStillValid);
@@ -57,31 +49,17 @@ export default function PickupButton({
     checkTime();
     const interval = setInterval(checkTime, 3000);
     return () => clearInterval(interval);
-  }, [startTime, pickupStatus]);
+  }, [startTime, pickupStatus, isPermanent]);
 
   // --- RENDERING ---
 
-  if (isExpired && pickupStatus === 'PENDING') {
-    return (
-      <span className="text-red-600 bg-red-50 px-2 py-1 rounded border border-red-200 text-[10px] font-bold uppercase italic">
-        Ժամկետնանց
-      </span>
-    );
-  }
-
-  if (pickupStatus === 'USER_READY') {
-    return (
-      <span className="text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200 text-[10px] animate-pulse font-medium text-center">
-        Սպասեք ադմինին
-      </span>
-    );
-  }
-
+  // 1. Եթե սարքն օգտագործման մեջ է (ԱՅՍՏԵՂ ՓՈԽՎԵԼ Է)
   if (pickupStatus === 'IN_USE') {
     return (
       <button
         disabled={loading}
         onClick={async () => {
+          if (!confirm("Հաստատո՞ւմ եք վերադարձի հարցումը:")) return;
           setLoading(true);
           try {
             const res = await requestReturn(resId);
@@ -97,10 +75,17 @@ export default function PickupButton({
     );
   }
 
-  if (pickupStatus === 'RETURN_REQUESTED') return <span className="text-blue-600 text-[10px] animate-pulse">Ստուգվում է...</span>;
-  if (pickupStatus === 'RETURNED') return <span className="text-gray-400 text-[10px]">Ավարտված</span>;
-  if (pickupStatus === 'CANCELLED') return <span className="text-red-400 text-[10px]">Չեղարկված</span>;
+  // 2. Մնացած կարգավիճակները (ինչպես նախկինում)
+  if (isExpired && pickupStatus === 'PENDING') {
+    return <span className="text-red-600 bg-red-50 px-2 py-1 rounded border border-red-200 text-[10px] font-bold uppercase italic block text-center">Ժամկետնանց</span>;
+  }
 
+  if (pickupStatus === 'USER_READY') return <span className="text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200 text-[10px] animate-pulse font-medium text-center block w-full">Սպասեք ադմինին</span>;
+  if (pickupStatus === 'RETURN_REQUESTED') return <span className="text-blue-600 text-[10px] animate-pulse font-bold block w-full text-center uppercase">Ստուգվում է...</span>;
+  if (pickupStatus === 'RETURNED') return <span className="text-gray-400 text-[10px] block w-full text-center uppercase font-bold">Ավարտված</span>;
+  if (pickupStatus === 'CANCELLED') return <span className="text-red-400 text-[10px] block w-full text-center uppercase font-bold">Չեղարկված</span>;
+
+  // 3. Վերցնելու կոճակը
   return (
     <button
       disabled={!canPickup || loading}

@@ -7,7 +7,8 @@ import {
   getUniqueAssetNames, 
   getStaffUsers, 
   getAssets, 
-  createPermanentAssignment 
+  createPermanentAssignment,
+  confirmReturn 
 } from "@/app/actions/reservation";
 
 export default function AllReservationsPage() {
@@ -25,7 +26,6 @@ export default function AllReservationsPage() {
   const [selectedAssetName, setSelectedAssetName] = useState("");
   const [serialSearch, setSerialSearch] = useState("");
 
-  // Ստեղծում ենք ընթացիկ ժամը տեղական ֆորմատով (YYYY-MM-DDTHH:mm) input-ի համար
   const getNow = () => {
     const now = new Date();
     const offset = now.getTimezoneOffset() * 60000;
@@ -67,36 +67,19 @@ export default function AllReservationsPage() {
     loadInitialData(currentTab);
   }, [currentTab]);
 
-  // --- ԺԱՄԻ ՈՒՂՂՎԱԾ ՖՈՒՆԿՑԻԱ ---
-const formatDateTime = (dateVal: any) => {
-  if (!dateVal) return "—";
-  
-  try {
-    // Ստեղծում ենք Date օբյեկտ
+  const formatDateTime = (dateVal: any) => {
+    if (!dateVal) return "—";
     const date = new Date(dateVal);
     if (isNaN(date.getTime())) return "—";
 
-    // Prisma-ն տալիս է UTC: Ստուգում ենք՝ արդյոք տեքստի մեջ կա 'Z' կամ timezone:
-    // Եթե չկա, ստիպում ենք JS-ին հասկանալ, որ սա UTC է:
-    let d = date;
-    if (typeof dateVal === 'string' && !dateVal.includes('Z') && !dateVal.includes('+')) {
-      d = new Date(dateVal + 'Z');
-    }
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const year = date.getUTCFullYear();
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
 
-    return d.toLocaleString('hy-AM', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-      timeZone: 'Asia/Yerevan' // Սա կավելացնի անհրաժեշտ 4 ժամը
-    });
-  } catch (e) {
-    return "—";
-  }
-};
-
+    return `${day}.${month}.${year}, ${hours}:${minutes}`;
+  };
 
   const filteredSerials = useMemo(() => {
     if (!selectedAssetName) return [];
@@ -131,6 +114,22 @@ const formatDateTime = (dateVal: any) => {
         await deleteReservation(id);
         setReservations(prev => prev.filter(r => r.id !== id));
         loadInitialData();
+      } catch (err) {
+        alert("Գործողությունը չհաջողվեց");
+      }
+    }
+  };
+
+  const handleConfirmReturn = async (id: number) => {
+    if (confirm("Հաստատո՞ւմ եք սարքի վերադարձը և ազատումը։")) {
+      try {
+        const res = await confirmReturn(id);
+        if (res.success) {
+          alert("Սարքը հաջողությամբ վերադարձվեց պահեստ:");
+          loadInitialData();
+        } else {
+          alert(res.error || "Գործողությունը ձախողվեց");
+        }
       } catch (err) {
         alert("Գործողությունը չհաջողվեց");
       }
@@ -173,13 +172,22 @@ const formatDateTime = (dateVal: any) => {
     const s = res.pickupStatus;
     const commonStyle = "px-2 py-1 rounded-full text-[10px] font-bold uppercase shadow-sm border";
     
+    // Եթե Ակտիվ ամրագրումների էջում ենք, հետ ենք տալիս հին լոգիկան
+    if (currentTab === 'active') {
+      if (s === 'USER_READY') return <span className={`${commonStyle} bg-purple-100 text-purple-800 border-purple-200`}>Պատրաստ է</span>;
+      if (s === 'IN_USE') return <span className={`${commonStyle} bg-blue-100 text-blue-800 border-blue-200`}>Վերցված է</span>;
+      return <span className={`${commonStyle} bg-green-100 text-green-800 border-green-200`}>Ամրագրված</span>;
+    }
+
+    // Մնացած տաբերի (Permanent / Archive) համար նոր լոգիկան
     switch (s) {
       case 'RETURNED': return <span className={`${commonStyle} bg-gray-100 text-gray-600 border-gray-200`}>Վերադարձված</span>;
       case 'CANCELLED': return <span className={`${commonStyle} bg-red-50 text-red-600 border-red-100`}>Չեղարկված</span>;
-      case 'IN_USE': return <span className={`${commonStyle} bg-blue-100 text-blue-800 border-blue-200`}>Վերցված է</span>;
-      case 'RETURN_REQUESTED': return <span className={`${commonStyle} bg-yellow-100 text-yellow-800 border-yellow-200`}>Վերադարձի հայտ</span>;
+      case 'IN_USE': return <span className={`${commonStyle} bg-blue-100 text-blue-800 border-blue-200`}>Օգտագործվում է</span>;
+      case 'RETURN_REQUESTED': return <span className={`${commonStyle} bg-yellow-100 text-yellow-800 border-yellow-200 animate-pulse`}>Վերադարձի հայտ</span>;
       case 'USER_READY': return <span className={`${commonStyle} bg-purple-100 text-purple-800 border-purple-200`}>Պատրաստ է</span>;
-      default: return <span className={`${commonStyle} bg-green-100 text-green-800 border-green-200`}>Ամրագրված</span>;
+      case 'PENDING': return <span className={`${commonStyle} bg-orange-100 text-orange-800 border-orange-200`}>Սպասման մեջ</span>;
+      default: return <span className={`${commonStyle} bg-green-100 text-green-800 border-green-200`}>Կցված է</span>;
     }
   };
 
@@ -288,17 +296,29 @@ const formatDateTime = (dateVal: any) => {
                 <td className="px-4 py-4 text-xs text-center text-gray-700">
                   <div className="font-bold text-blue-700">{formatDateTime(res.start_time)}</div>
                   <div className="text-gray-400 mt-1">
-                    {res.end_time && new Date(res.end_time).getFullYear() < 9000 ? formatDateTime(res.end_time) : "— անժամկետ —"}
+                    {res.end_time && new Date(res.end_time).getUTCFullYear() < 9000 ? formatDateTime(res.end_time) : "— անժամկետ —"}
                   </div>
                 </td>
                 <td className="px-4 py-4 text-center">{getStatusBadge(res)}</td>
                 <td className="px-4 py-4 text-sm">
-                  {currentTab !== 'archive' && (
-                    <button onClick={() => handleDelete(res.id)} className="text-red-600 font-bold hover:underline cursor-pointer">
-                      {currentTab === 'permanent' ? 'Ազատել' : 'Չեղարկել'}
-                    </button>
-                  )}
-                  {currentTab === 'archive' && <span className="text-gray-400 italic text-xs">Արխիվացված</span>}
+                  <div className="flex gap-3">
+                    {/* Վերադարձի հաստատումը ԵՐԵՎՈՒՄ Է ՄԻԱՅՆ PERMANENT TAB-ՈՒՄ */}
+                    {currentTab === 'permanent' && res.pickupStatus === 'RETURN_REQUESTED' && (
+                      <button 
+                        onClick={() => handleConfirmReturn(res.id)} 
+                        className="text-green-600 font-bold hover:underline cursor-pointer"
+                      >
+                        Հաստատել վերադարձը
+                      </button>
+                    )}
+
+                    {currentTab !== 'archive' && (
+                      <button onClick={() => handleDelete(res.id)} className="text-red-600 font-bold hover:underline cursor-pointer">
+                        {currentTab === 'permanent' ? 'Ազատել' : 'Չեղարկել'}
+                      </button>
+                    )}
+                    {currentTab === 'archive' && <span className="text-gray-400 italic text-xs">Արխիվացված</span>}
+                  </div>
                 </td>
               </tr>
             ))}

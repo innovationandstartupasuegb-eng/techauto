@@ -117,50 +117,32 @@ export async function getStaffUsers() {
 export async function createPermanentAssignment(data: {
   assetId: number;
   userId: number;
-  start_time: string;
+  start_time: string; // Սա գալիս է input-ից
 }) {
   try {
-    const session = await getServerSession(authOptions);
-    const adminUser = session?.user as any;
+    // ... ստուգումներ (session, admin role)
 
-    if (!session || adminUser?.role !== 'admin') {
-      throw new Error("Այս գործողությունը թույլատրված է միայն ադմինին։");
-    }
+    // 1. ԿԱՐԵՎՈՐ. Օգտագործեք ճիշտ նույն մշակումը, ինչ սովորականի ժամանակ
+    // Եթե սովորականի մեջ ունեք parseToUTC(data.start_time), ապա այստեղ էլ դրեք դա
+    const newStartTime = new Date(data.start_time); 
 
-    const newStartTime = parseToUTC(data.start_time);
-    
-    if (isNaN(newStartTime.getTime())) {
-      throw new Error("Սկզբնաժամկետի ձևաչափը սխալ է:");
-    }
-
-    const result = await prisma.$transaction(async (tx: any) => {
-      const conflict = await tx.reservations.findFirst({
-        where: {
-          asset_id: data.assetId,
-          status: { in: ["Reserved", "Assigned"] },
-          AND: [
-            { OR: [{ end_time: { gt: newStartTime } }, { end_time: null }] }
-          ]
-        }
-      });
-
-      if (conflict) {
-        throw new Error("Այս սարքը ներկայումս զբաղված է կամ արդեն կցված է մեկ այլ անձի։");
-      }
-
+    const result = await prisma.$transaction(async (tx) => {
+      
+      // 2. Ստեղծում ենք հենց այնպես, ինչպես սովորականը, բայց end_time: null
       const reservation = await tx.reservations.create({
         data: {
-          asset_id: data.assetId,
-          user_id: data.userId,
+          asset_id: Number(data.assetId),
+          user_id: Number(data.userId),
           start_time: newStartTime,
-          end_time: null,
-          status: 'Assigned',
-          pickupStatus: 'IN_USE'
+          end_time: null, // Սա է միակ տարբերությունը
+          status: 'Reserved',
+          pickupStatus: 'PENDING'
         },
       });
 
+      // 3. Սարքը նշում ենք որպես Assigned
       await tx.assets.update({
-        where: { id: data.assetId },
+        where: { id: Number(data.assetId) },
         data: { status: 'Assigned' },
       });
 
@@ -168,10 +150,9 @@ export async function createPermanentAssignment(data: {
     });
 
     revalidatePath('/admin/reservations');
-    revalidatePath('/myreservations');
-    return { success: true, data: result };
+    return { success: true };
   } catch (error: any) {
-    throw new Error(error.message || "Անժամկետ կցումը ձախողվեց։");
+    return { success: false, error: error.message };
   }
 }
 
@@ -335,13 +316,12 @@ export async function deleteReservation(id: number) {
   }
 }
 
-export async function getReservations(type: 'active' | 'permanent' | 'archive' = 'active') {
+export async function getReservations(type: 'active' | 'permanent' | 'archive' | 'all' = 'active') {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) return [];
 
     const userRole = (session.user as any).role;
-    // Դարձնում ենք թիվ, որպեսզի Prisma-ն չբողոքի
     const userId = parseInt((session.user as any).id);
 
     if (isNaN(userId)) {
@@ -353,12 +333,12 @@ export async function getReservations(type: 'active' | 'permanent' | 'archive' =
 
     let whereClause: any = {};
 
-    // Եթե ադմին չէ, ֆիլտրում ենք ըստ իր ID-ի
+    // 1. Եթե ադմին չէ, պարտադիր ֆիլտրում ենք ըստ իր ID-ի
     if (userRole !== 'admin') {
-      whereClause.user_id = userId; // Հիմա սա արդեն թիվ է (Int)
+      whereClause.user_id = userId;
     }
 
-    // Մնացած ֆիլտրերը...
+    // 2. Ֆիլտրերի տրամաբանությունը
     switch (type) {
       case 'active':
         whereClause.status = 'Reserved';
@@ -370,6 +350,11 @@ export async function getReservations(type: 'active' | 'permanent' | 'archive' =
         break;
       case 'archive':
         whereClause.pickupStatus = { in: ['RETURNED', 'CANCELLED'] };
+        break;
+      case 'all':
+        // «all» տարբերակը օգտատիրոջ էջի համար է, որտեղ պետք է բերել ամեն ինչ
+        // Բացի չեղարկվածներից և վերադարձվածներից (կամ կարող եք թողնել ամեն ինչ)
+        whereClause.pickupStatus = { notIn: ['RETURNED', 'CANCELLED'] };
         break;
     }
 
@@ -429,17 +414,18 @@ export async function confirmReturn(reservationId: number) {
     if (!reservation) throw new Error("Ամրագրումը չի գտնվել");
 
     await prisma.$transaction([
+      // 1. Թարմացնում ենք ամրագրումը (Reservation)
       prisma.reservations.update({
         where: { id: reservationId },
         data: { 
-          pickupStatus: 'RETURNED',
-          // Փոխում ենք ստատուսը 'Returned', որպեսզի այն այլևս չերևա որպես զբաղված սլոթ
-          status: 'Available' 
+          pickupStatus: 'RETURNED', // Սա ձեր նշած enum-ն է
+          status: 'Available'      // Սա էլ Reservations-ի status enum-ն է
         }
       }),
+      // 2. Թարմացնում ենք սարքը (Asset)
       prisma.assets.update({
         where: { id: reservation.asset_id! },
-        data: { status: 'Available' }
+        data: { status: 'Available' } // Սարքը ևս դառնում է Available (ազատ)
       })
     ]);
 
@@ -448,63 +434,94 @@ export async function confirmReturn(reservationId: number) {
     
     return { success: true };
   } catch (error: any) {
-    console.error("Վերադարձի հաստատման սխալ:", error);
+    console.error("Confirm return error:", error);
     return { success: false, error: "Չհաջողվեց հաստատել վերադարձը" };
   }
 }
 
-// ... (նախորդ կոդը մնում է նույնը մինչև cleanupExpiredReservations ֆունկցիան)
 
+// ... (նախորդ կոդը մնում է նույնը մինչև cleanupExpiredReservations ֆունկցիան)
 export async function cleanupExpiredReservations() {
   try {
+    // Օգտագործում ենք ստանդարտ Date(), որը Prisma-ն ճիշտ կհամադրի բազայի հետ
     const now = new Date();
     
-    // Շեմը՝ 30 րոպե սկզբից անցած
+    // Շեմը (threshold) հաշվարկում ենք ընթացիկ պահից 30 րոպե հետ
     const startThreshold = new Date(now.getTime() - (30 * 60 * 1000));
 
-    const expiredReservations = await prisma.reservations.findMany({
+    // --- 1. ԱՎՏՈՄԱՏ ԱԿՏԻՎԱՑՈՒՄ (Միայն Ադմինների համար) ---
+    const adminToActivate = await prisma.reservations.findMany({
       where: {
-        status: 'Reserved',
         pickupStatus: 'PENDING',
-        OR: [
-          {
-            // Պայման 1: Ավարտի ժամը անցել է
-            end_time: {
-              lt: now
-            }
-          },
-          {
-            // Պայման 2: Սկզբից անցել է 30 րոպե, բայց դեռ չի վերցվել
-            start_time: {
-              lt: startThreshold
-            }
-          }
-        ]
+        start_time: { lte: now }, // Օգտագործում ենք 'now'
+        end_time: { not: null },  // Անժամկետներին ձեռք չտալ
+        users: { role: 'admin' }
       }
     });
 
-    if (expiredReservations.length > 0) {
-      const reservationIds = expiredReservations.map(r => r.id);
-      const assetIds = expiredReservations
-        .map(r => r.asset_id)
-        .filter((id): id is number => id !== null);
+    if (adminToActivate.length > 0) {
+      await prisma.reservations.updateMany({
+        where: { id: { in: adminToActivate.map(r => r.id) } },
+        data: { pickupStatus: 'IN_USE' }
+      });
+    }
+
+    // --- 2. ԱՎՏՈՄԱՏ ԱՎԱՐՏՈՒՄ (Միայն Ադմինների համար) ---
+    const adminToFinish = await prisma.reservations.findMany({
+      where: {
+        pickupStatus: 'IN_USE',
+        end_time: { 
+          not: null, // Անժամկետ սարքը երբեք ավտոմատ չի ավարտվում
+          lt: now    // Օգտագործում ենք 'now'
+        },
+        users: { role: 'admin' }
+      }
+    });
+
+    if (adminToFinish.length > 0) {
+      const resIds = adminToFinish.map(r => r.id);
+      const assetIds = adminToFinish.map(r => r.asset_id).filter(id => id !== null) as number[];
 
       await prisma.$transaction([
         prisma.reservations.updateMany({
-          where: { id: { in: reservationIds } },
-          data: {
-            pickupStatus: 'CANCELLED',
-            status: 'Cancelled' 
-          }
+          where: { id: { in: resIds } },
+          data: { pickupStatus: 'RETURNED', status: 'Available' }
         }),
         prisma.assets.updateMany({
           where: { id: { in: assetIds } },
           data: { status: 'Available' }
         })
       ]);
-      
-      console.log(`Cleanup: ${expiredReservations.length} գործարք չեղարկվեց:`);
     }
+
+    // --- 3. ՈՒՍԱՆՈՂՆԵՐԻ/ԱՇԽԱՏՈՂՆԵՐԻ ԺԱՄԿԵՏԱՆՑՆԵՐԻ ՉԵՂԱՐԿՈՒՄ ---
+    const expiredStudent = await prisma.reservations.findMany({
+      where: {
+        pickupStatus: 'PENDING',
+        NOT: { end_time: null }, // Անժամկետ կցումները երբեք չեն չեղարկվում
+        OR: [
+          { end_time: { lt: now } },          // Օգտագործում ենք 'now'
+          { start_time: { lt: startThreshold } }
+        ]
+      }
+    });
+    
+    if (expiredStudent.length > 0) {
+      const resIds = expiredStudent.map(r => r.id);
+      const assetIds = expiredStudent.map(r => r.asset_id).filter(id => id !== null) as number[];
+
+      await prisma.$transaction([
+        prisma.reservations.updateMany({
+          where: { id: { in: resIds } },
+          data: { pickupStatus: 'CANCELLED', status: 'Available' }
+        }),
+        prisma.assets.updateMany({
+          where: { id: { in: assetIds } },
+          data: { status: 'Available' }
+        })
+      ]);
+    }
+
   } catch (error) {
     console.error("Cleanup error:", error);
   }
