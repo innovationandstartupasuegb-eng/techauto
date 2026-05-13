@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { createClient } from "@/utils/supabase/server";
+
 
 /**
  * Օգնող ֆունկցիա՝ ամսաթիվը UTC ձևաչափի բերելու համար։
@@ -48,9 +50,23 @@ export async function getAssets() {
 
 export async function confirmAdminHandover(reservationId: number) {
   try {
+    // 1. Նախ գտնում ենք ամրագրումը, որպեսզի տեսնենք՝ արդյոք այն անժամկետ է
+    const reservation = await prisma.reservations.findUnique({
+      where: { id: reservationId },
+      select: { end_time: true } // մեզ միայն սա է պետք ստուգելու համար
+    });
+
+    if (!reservation) throw new Error("Ամրագրումը չի գտնվել");
+
+    // 2. Թարմացնում ենք տվյալները
     await prisma.reservations.update({
       where: { id: reservationId },
-      data: { pickupStatus: 'IN_USE' },
+      data: { 
+        pickupStatus: 'IN_USE',
+        // Եթե end_time-ը null է, նշանակում է սա անժամկետ կցում է
+        // և մենք status-ը Reserved-ից սարքում ենք Assigned
+        status: reservation.end_time === null ? 'Assigned' : 'Reserved'
+      },
     });
 
     revalidatePath('/admin/reservations');
@@ -120,27 +136,54 @@ export async function createPermanentAssignment(data: {
   start_time: string; // Սա գալիս է input-ից
 }) {
   try {
-    // ... ստուգումներ (session, admin role)
+    const session = await getServerSession(authOptions);
+    if (!session || (session.user as any).role !== 'admin') {
+      throw new Error("Այս գործողությունը թույլատրված է միայն ադմինին։");
+    }
 
-    // 1. ԿԱՐԵՎՈՐ. Օգտագործեք ճիշտ նույն մշակումը, ինչ սովորականի ժամանակ
-    // Եթե սովորականի մեջ ունեք parseToUTC(data.start_time), ապա այստեղ էլ դրեք դա
-    const newStartTime = new Date(data.start_time); 
+    // 1. Ստեղծում ենք ժամանակավոր Date օբյեկտ
+    const checkStartTime = new Date(data.start_time);
+
+    // 2. Պատրաստում ենք վերջնական ժամը բազայի համար (UTC+4 ուղղումով)
+    // Այս հատվածը վերցրված է քո սովորական ամրագրման կոդից
+    const offset = 4 * 60 * 60 * 1000; 
+    const newStartTime = new Date(checkStartTime.getTime() + offset);
+
+    if (isNaN(newStartTime.getTime())) {
+      throw new Error("Ամսաթվի ձևաչափը սխալ է։");
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       
-      // 2. Ստեղծում ենք հենց այնպես, ինչպես սովորականը, բայց end_time: null
+      // 3. Կոնֆլիկտի ստուգում (որպեսզի նույն սարքը նույն ժամին չկրկնվի)
+      const conflict = await tx.reservations.findFirst({
+        where: {
+          asset_id: Number(data.assetId),
+          status: { in: ['Reserved', 'Assigned'] },
+          pickupStatus: { not: 'CANCELLED' }, // Միայն ակտիվները
+          AND: [
+            { OR: [{ end_time: { gt: newStartTime } }, { end_time: null }] }
+          ]
+        }
+      });
+
+      if (conflict) {
+        throw new Error("Այս սարքն արդեն զբաղված է նշված ժամին:");
+      }
+
+      // 4. Ստեղծում ենք ամրագրումը (end_time: null)
       const reservation = await tx.reservations.create({
         data: {
           asset_id: Number(data.assetId),
           user_id: Number(data.userId),
           start_time: newStartTime,
-          end_time: null, // Սա է միակ տարբերությունը
-          status: 'Reserved',
+          end_time: null, 
+          status: 'Reserved', // Սկզբից Reserved, որ երևա ակտիվներում
           pickupStatus: 'PENDING'
         },
       });
 
-      // 3. Սարքը նշում ենք որպես Assigned
+      // 5. Սարքը նշում ենք որպես Assigned
       await tx.assets.update({
         where: { id: Number(data.assetId) },
         data: { status: 'Assigned' },
@@ -150,8 +193,11 @@ export async function createPermanentAssignment(data: {
     });
 
     revalidatePath('/admin/reservations');
-    return { success: true };
+    revalidatePath('/myreservations');
+    
+    return { success: true, data: result };
   } catch (error: any) {
+    console.error("Permanent Assignment Error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -525,4 +571,32 @@ export async function cleanupExpiredReservations() {
   } catch (error) {
     console.error("Cleanup error:", error);
   }
+}
+
+export async function getPendingRequests() {
+  // Ստեղծում ենք սերվերային կապը
+  const supabase = await createClient();
+
+  // Հարցնում ենք միայն անհրաժեշտ սյունակները և միայն ակտիվ ստատուսները
+  const { data, error } = await supabase
+    .from('reservations')
+    .select(`
+      id, 
+      pickupStatus, 
+      assets (
+        name, 
+        serial_number
+      ), 
+      users (
+        full_name
+      )
+    `)
+    .in('pickupStatus', ['USER_READY', 'RETURN_REQUESTED']);
+
+  if (error) {
+    console.error("Supabase Error:", error.message);
+    return [];
+  }
+    
+  return data;
 }

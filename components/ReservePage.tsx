@@ -11,14 +11,15 @@ import {
   AlertCircle, 
   ChevronLeft, 
   CheckCircle2,
-  Info
+  Info,
+  Settings2
 } from 'lucide-react';
 
 interface ReservePageProps {
-  assets: any[];      // Եզակի անուններով սարքեր
-  allAssets: any[];   // Բոլոր սարքերը (սերիական համարների համար)
-  canIndefinite: boolean; 
-  isActualAdmin: boolean; 
+  assets: any[];
+  allAssets: any[];
+  canIndefinite?: boolean; 
+  isActualAdmin?: boolean; 
 }
 
 export default function ReservePage({ 
@@ -33,20 +34,18 @@ export default function ReservePage({
   const [reservedSlots, setReservedSlots] = useState<any[]>([]);
   
   const [formData, setFormData] = useState({
-    assetName: "",    // Տեսակը (օր. Laptop HP)
-    assetId: "any",   // Կոնկրետ ID-ն կամ "any"
+    assetName: "",
+    assetId: "any",
     date: "",
     startTime: "09:00",
     endTime: "09:20"
   });
 
-  // Ֆիլտրում ենք սերիական համարները ըստ ընտրված տեսակի
   const serialNumbers = useMemo(() => {
     if (!formData.assetName) return [];
     return allAssets.filter(a => a.name === formData.assetName);
   }, [formData.assetName, allAssets]);
 
-  // Ստանում ենք արդեն զբաղված ժամերը
   useEffect(() => {
     async function fetchSlots() {
       if (formData.assetId !== "any" && formData.date) {
@@ -121,54 +120,63 @@ export default function ReservePage({
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-12">
-      {/* Վերնագիր և Navigation */}
-      <div className="bg-white border-b px-4 py-4 sm:px-6 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-3xl mx-auto flex items-center justify-between">
+    <div className="bg-slate-200 min-h-screen font-sans text-slate-900 pb-12">
+      
+      {/* Ճշգրիտ պատճենված Navbar ManageClient-ից */}
+      <div className="bg-white/80 backdrop-blur-md border-b border-slate-300 px-6 py-6 sticky top-0 z-20 shadow-sm">
+        <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <button 
             onClick={() => router.back()}
-            className="flex items-center text-gray-600 hover:text-blue-600 transition-colors group"
+            className="flex items-center text-slate-500 hover:text-indigo-600 transition-all font-black uppercase text-[10px] tracking-widest group"
           >
-            <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
-            <span className="ml-1 font-medium">Հետ</span>
+            <ChevronLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+            <span className="ml-1">Հետ դեպի գլխավոր</span>
           </button>
-          <h1 className="text-xl font-bold text-gray-800">Նոր Ամրագրում</h1>
-          <div className="w-10"></div>
+
+          <div className="text-right">
+            <h1 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2 justify-end">
+              <Calendar size={20} className="text-indigo-600" />
+              Նոր Ամրագրում
+            </h1>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">
+              Սարքավորումների ամրագրման համակարգ
+            </p>
+          </div>
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto px-4 mt-8">
-        {/* Հաղորդագրությունների բլոկ */}
+      {/* Մեջտեղի հատված - Ձեռք չի տրվել (բացի վերևի padding-ից) */}
+      <div className="max-w-3xl mx-auto px-6 pt-10">
         {message && (
-          <div className={`mb-6 p-4 rounded-xl flex items-center gap-3 border animate-in fade-in slide-in-from-top-4 ${
+          <div className={`mb-8 p-5 rounded-[1.5rem] flex items-center gap-4 border shadow-xl animate-in fade-in slide-in-from-top-4 ${
             message.includes('✅') 
-              ? 'bg-green-50 text-green-700 border-green-200' 
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
               : 'bg-red-50 text-red-700 border-red-200'
           }`}>
-            {message.includes('✅') ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
-            <p className="font-medium">{message}</p>
+            {message.includes('✅') ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
+            <p className="font-black uppercase text-[11px] tracking-wider">{message}</p>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-8">
           
-          {/* Սեկցիա 1. Սարքի տվյալներ */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-5">
-            <div className="flex items-center gap-2 text-blue-600 border-b pb-3">
-              <Monitor size={22} />
-              <h2 className="font-semibold text-lg text-gray-800">Ի՞նչ սարք է հարկավոր</h2>
+          {/* Սեկցիա 1. Սարքի ընտրություն */}
+          <div className="bg-slate-50 rounded-[2.5rem] shadow-2xl border border-slate-300 p-8 space-y-6">
+            <div className="flex items-center gap-3 text-indigo-600 border-b border-slate-200 pb-4">
+              <Monitor size={20} strokeWidth={3} />
+              <h2 className="font-black text-xs uppercase tracking-[0.2em] text-slate-800">Ընտրեք սարքավորումը</h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-600 ml-1">Սարքի տեսակը</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Տեսակը</label>
                 <select 
                   required
-                  className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all cursor-pointer hover:border-blue-300"
+                  className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all cursor-pointer shadow-sm appearance-none hover:border-indigo-300"
                   onChange={(e) => setFormData({...formData, assetName: e.target.value, assetId: "any"})}
                   value={formData.assetName}
                 >
-                  <option value="">Ընտրեք տեսակը</option>
+                  <option value="">Ընտրեք տեսակը...</option>
                   {assets.map((asset) => (
                     <option key={asset.id} value={asset.name}>{asset.name}</option>
                   ))}
@@ -176,12 +184,12 @@ export default function ReservePage({
               </div>
 
               {formData.assetName && (
-                <div className="space-y-1.5 animate-in fade-in zoom-in-95">
-                  <label className="text-sm font-semibold text-gray-600 ml-1">Սերիական համար (ըստ ցանկության)</label>
+                <div className="space-y-2 animate-in fade-in zoom-in-95">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Կոնկրետ սարք (S/N)</label>
                   <div className="relative">
-                    <Hash className="absolute left-3 top-3.5 text-gray-400" size={18} />
+                    <Hash className="absolute left-4 top-4.5 text-slate-300" size={16} />
                     <select 
-                      className="w-full p-3 pl-10 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all cursor-pointer hover:border-blue-300"
+                      className="w-full p-4 pl-12 bg-white border border-slate-200 rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all cursor-pointer shadow-sm appearance-none"
                       onChange={(e) => setFormData({...formData, assetId: e.target.value})}
                       value={formData.assetId}
                     >
@@ -197,31 +205,31 @@ export default function ReservePage({
           </div>
 
           {/* Սեկցիա 2. Ժամանակացույց */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 space-y-5">
-            <div className="flex items-center gap-2 text-blue-600 border-b pb-3">
-              <Calendar size={22} />
-              <h2 className="font-semibold text-lg text-gray-800">Ամսաթիվ և Ժամ</h2>
+          <div className="bg-slate-50 rounded-[2.5rem] shadow-2xl border border-slate-300 p-8 space-y-6">
+            <div className="flex items-center gap-3 text-indigo-600 border-b border-slate-200 pb-4">
+              <Calendar size={20} strokeWidth={3} />
+              <h2 className="font-black text-xs uppercase tracking-[0.2em] text-slate-800">Ամսաթիվ և Ժամանակ</h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-600 ml-1">Օրը</label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ամսաթիվ</label>
                 <input 
                   required
                   type="date"
                   min={new Date().toISOString().split('T')[0]}
-                  className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                  className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm"
                   value={formData.date}
                   onChange={(e) => setFormData({...formData, date: e.target.value})}
                 />
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-600 ml-1">Սկիզբ</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Սկիզբ</label>
                 <div className="relative">
-                  <Clock className="absolute left-3 top-3.5 text-gray-400" size={18} />
+                  <Clock className="absolute left-4 top-4 text-slate-300" size={16} />
                   <select 
-                    className="w-full p-3 pl-10 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
+                    className="w-full p-4 pl-12 bg-white border border-slate-200 rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm appearance-none" 
                     onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
                     value={formData.startTime}
                   >
@@ -230,34 +238,33 @@ export default function ReservePage({
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-gray-600 ml-1">Ավարտ</label>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ավարտ</label>
                 <div className="relative">
-                  <Clock className="absolute left-3 top-3.5 text-gray-400" size={18} />
+                  <Clock className="absolute left-4 top-4 text-slate-300" size={16} />
                   <select 
                     required
-                    className="w-full p-3 pl-10 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                    className="w-full p-4 pl-12 bg-white border border-slate-200 rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm appearance-none font-black text-indigo-600"
                     onChange={(e) => setFormData({...formData, endTime: e.target.value})}
                     value={formData.endTime}
                   >
-                    <option value="">Ընտրել...</option>
+                    <option value="">Ժամը...</option>
                     {availableEndTimes.map(t => <option key={t} value={t}>{t}</option>)}
                   </select>
                 </div>
               </div>
             </div>
 
-            {/* Զբաղված ժամերի տեղեկատվական բլոկ */}
             {reservedSlots.length > 0 && (
-              <div className="mt-4 p-4 bg-amber-50 rounded-xl border border-amber-100">
-                <div className="flex items-center gap-2 text-amber-800 mb-2 font-semibold text-sm">
-                  <Info size={16} />
-                  Այս սարքի զբաղված ժամերը (տվյալ օրը)
+              <div className="mt-6 p-5 bg-orange-100/50 rounded-[1.5rem] border border-orange-200">
+                <div className="flex items-center gap-2 text-orange-800 mb-4 font-black uppercase text-[9px] tracking-widest">
+                  <Info size={14} />
+                  Այս սարքի զբաղված ժամերը
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {reservedSlots.map((slot, i) => (
-                    <span key={i} className="px-3 py-1 bg-amber-100 text-amber-900 rounded-full text-xs font-medium">
-                      {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
+                    <span key={i} className="px-4 py-2 bg-white text-orange-700 border border-orange-100 rounded-xl text-[10px] font-black shadow-sm tracking-tighter">
+                      {formatTime(slot.start_time)} — {formatTime(slot.end_time)}
                     </span>
                   ))}
                 </div>
@@ -265,26 +272,26 @@ export default function ReservePage({
             )}
           </div>
 
-          {/* Հաստատման կոճակ */}
-          <button 
-            disabled={loading || !formData.assetName}
-            type="submit" 
-            className={`w-full py-4 rounded-2xl font-bold text-white shadow-lg transition-all flex items-center justify-center gap-2 ${
-              loading || !formData.assetName
-                ? 'bg-gray-400 cursor-not-allowed shadow-none' 
-                : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.98] hover:shadow-blue-200'
-            }`}
-          >
-            {loading ? (
-              <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-            ) : (
-              <>
-                <CheckCircle2 size={22} />
-                Հաստատել ամրագրումը
-              </>
-            )}
-          </button>
-
+          <div className="max-w-md mx-auto">
+            <button 
+              disabled={loading || !formData.assetName}
+              type="submit" 
+              className={`w-full py-6 rounded-[2rem] font-black uppercase text-xs tracking-[0.3em] text-white shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 ${
+                loading || !formData.assetName
+                  ? 'bg-slate-400 cursor-not-allowed shadow-none' 
+                  : 'bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-200'
+              }`}
+            >
+              {loading ? (
+                <div className="w-5 h-5 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
+              ) : (
+                <>
+                  <CheckCircle2 size={20} strokeWidth={3} />
+                  Հաստատել ամրագրումը
+                </>
+              )}
+            </button>
+          </div>
         </form>
       </div>
     </div>

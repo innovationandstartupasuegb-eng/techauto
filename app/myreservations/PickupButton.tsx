@@ -2,6 +2,7 @@
 
 import { requestPickup, requestReturn } from "@/app/actions/reservation";
 import { useState, useEffect } from "react";
+import { Clock, CheckCircle2, RotateCcw, AlertCircle } from 'lucide-react';
 
 export default function PickupButton({ 
   resId, 
@@ -16,12 +17,10 @@ export default function PickupButton({
   const [isExpired, setIsExpired] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Ստուգում ենք՝ արդյոք սա անժամկետ (assigned) ամրագրում է
   const isPermanent = new Date(startTime).getUTCFullYear() > 9000;
 
   useEffect(() => {
     const checkTime = () => {
-      // Եթե անժամկետ է, ժամանակային սահմանափակում չկա
       if (isPermanent) {
         setCanPickup(true);
         return;
@@ -33,7 +32,7 @@ export default function PickupButton({
 
       const nowMs = now.getTime();
       const startMs = pureStart.getTime();
-      const expirationMs = startMs + (30 * 60 * 1000); // 30 րոպե
+      const expirationMs = startMs + (30 * 60 * 1000);
 
       if (nowMs > expirationMs && pickupStatus === 'PENDING') {
         setIsExpired(true);
@@ -51,9 +50,14 @@ export default function PickupButton({
     return () => clearInterval(interval);
   }, [startTime, pickupStatus, isPermanent]);
 
-  // --- RENDERING ---
+  // --- RENDERING HELPER ---
+  const StatusBadge = ({ children, className }: { children: React.ReactNode, className: string }) => (
+    <span className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1 border ${className}`}>
+      {children}
+    </span>
+  );
 
-  // 1. Եթե սարքն օգտագործման մեջ է (ԱՅՍՏԵՂ ՓՈԽՎԵԼ Է)
+  // 1. Եթե սարքն օգտագործման մեջ է
   if (pickupStatus === 'IN_USE') {
     return (
       <button
@@ -68,22 +72,53 @@ export default function PickupButton({
             setLoading(false);
           }
         }}
-        className="bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded text-[10px] font-bold uppercase transition active:scale-95 cursor-pointer shadow-sm w-full"
+        className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 cursor-pointer shadow-lg shadow-orange-200 w-full flex items-center justify-center gap-2"
       >
-        {loading ? "..." : "Վերադարձնել"}
+        {loading ? "..." : <><RotateCcw size={14} /> Վերադարձնել</>}
       </button>
     );
   }
 
-  // 2. Մնացած կարգավիճակները (ինչպես նախկինում)
+  // 2. Մնացած կարգավիճակները
   if (isExpired && pickupStatus === 'PENDING') {
-    return <span className="text-red-600 bg-red-50 px-2 py-1 rounded border border-red-200 text-[10px] font-bold uppercase italic block text-center">Ժամկետնանց</span>;
+    return (
+      <StatusBadge className="text-red-500 bg-red-50 border-red-100 italic">
+        <AlertCircle size={12} /> Ժամկետնանց
+      </StatusBadge>
+    );
   }
 
-  if (pickupStatus === 'USER_READY') return <span className="text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200 text-[10px] animate-pulse font-medium text-center block w-full">Սպասեք ադմինին</span>;
-  if (pickupStatus === 'RETURN_REQUESTED') return <span className="text-blue-600 text-[10px] animate-pulse font-bold block w-full text-center uppercase">Ստուգվում է...</span>;
-  if (pickupStatus === 'RETURNED') return <span className="text-gray-400 text-[10px] block w-full text-center uppercase font-bold">Ավարտված</span>;
-  if (pickupStatus === 'CANCELLED') return <span className="text-red-400 text-[10px] block w-full text-center uppercase font-bold">Չեղարկված</span>;
+  if (pickupStatus === 'USER_READY') {
+    return (
+      <StatusBadge className="text-amber-600 bg-amber-50 border-amber-200 animate-pulse">
+        <Clock size={12} /> Սպասեք ադմինին
+      </StatusBadge>
+    );
+  }
+
+  if (pickupStatus === 'RETURN_REQUESTED') {
+    return (
+      <StatusBadge className="text-blue-600 bg-blue-50 border-blue-100 animate-pulse">
+        <RotateCcw size={12} className="animate-spin-slow" /> Ստուգվում է...
+      </StatusBadge>
+    );
+  }
+
+  if (pickupStatus === 'RETURNED') {
+    return (
+      <StatusBadge className="text-slate-400 bg-slate-50 border-slate-200 opacity-60">
+        <CheckCircle2 size={12} /> Ավարտված
+      </StatusBadge>
+    );
+  }
+
+  if (pickupStatus === 'CANCELLED') {
+    return (
+      <StatusBadge className="text-red-300 bg-transparent border-red-100">
+        Չեղարկված
+      </StatusBadge>
+    );
+  }
 
   // 3. Վերցնելու կոճակը
   return (
@@ -98,10 +133,10 @@ export default function PickupButton({
           setLoading(false);
         }
       }}
-      className={`px-3 py-1 rounded text-[10px] font-bold uppercase transition-all w-full ${
+      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all w-full flex items-center justify-center gap-2 ${
         canPickup 
-          ? 'bg-blue-600 text-white hover:bg-blue-700 cursor-pointer shadow-md active:scale-95' 
-          : 'bg-gray-200 text-gray-400 cursor-not-allowed opacity-70'
+          ? 'bg-indigo-600 text-white hover:bg-indigo-700 cursor-pointer shadow-lg shadow-indigo-200 active:scale-95' 
+          : 'bg-slate-100 text-slate-300 cursor-not-allowed border border-slate-200'
       }`}
     >
       {loading ? "..." : "Վերցնել"}

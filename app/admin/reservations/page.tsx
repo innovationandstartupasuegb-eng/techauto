@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation"; // Ավելացվեց սա
+import { ChevronLeft, CalendarCheck2, PlusCircle } from 'lucide-react';
 import { 
   getReservations, 
   deleteReservation, 
@@ -8,21 +10,21 @@ import {
   getStaffUsers, 
   getAssets, 
   createPermanentAssignment,
-  confirmReturn 
+  confirmReturn,
+  confirmAdminHandover 
 } from "@/app/actions/reservation";
 
 export default function AllReservationsPage() {
+  const router = useRouter(); // Initialize router
   const [reservations, setReservations] = useState<any[]>([]);
   const [assetNames, setAssetNames] = useState<string[]>([]);
   const [staff, setStaff] = useState<any[]>([]);
   const [allAssets, setAllAssets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
   const [currentTab, setCurrentTab] = useState<'active' | 'permanent' | 'archive'>('active');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
   const [selectedAssetName, setSelectedAssetName] = useState("");
   const [serialSearch, setSerialSearch] = useState("");
 
@@ -71,13 +73,11 @@ export default function AllReservationsPage() {
     if (!dateVal) return "—";
     const date = new Date(dateVal);
     if (isNaN(date.getTime())) return "—";
-
     const day = String(date.getUTCDate()).padStart(2, '0');
     const month = String(date.getUTCMonth() + 1).padStart(2, '0');
     const year = date.getUTCFullYear();
     const hours = String(date.getUTCHours()).padStart(2, '0');
     const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-
     return `${day}.${month}.${year}, ${hours}:${minutes}`;
   };
 
@@ -94,52 +94,46 @@ export default function AllReservationsPage() {
       const fullName = res.users?.full_name || "";
       const assetName = res.assets?.name || "";
       const resId = res.id.toString();
-      
       const matchesUser = fullName.toLowerCase().includes(userSearch.toLowerCase());
       const matchesStatus = statusFilter === "all" || res.status === statusFilter;
       const matchesAssetName = assetNameFilter === "all" || assetName === assetNameFilter;
       const matchesId = idSearch === "" || resId.includes(idSearch);
-      
       return matchesUser && matchesStatus && matchesAssetName && matchesId;
     });
   }, [userSearch, statusFilter, assetNameFilter, idSearch, reservations]);
 
   const handleDelete = async (id: number) => {
-    const message = currentTab === 'permanent' 
-      ? "Վստա՞հ եք, որ ուզում եք ազատել այս սարքը աշխատակցից:" 
-      : "Վստա՞հ եք, որ ուզում եք չեղարկել ամրագրումը և ազատել սարքը։";
-      
+    const message = currentTab === 'permanent' ? "Ազատե՞լ սարքը:" : "Չեղարկե՞լ ամրագրումը:";
     if (confirm(message)) {
       try {
         await deleteReservation(id);
         setReservations(prev => prev.filter(r => r.id !== id));
         loadInitialData();
-      } catch (err) {
-        alert("Գործողությունը չհաջողվեց");
-      }
+      } catch (err) { alert("Սխալ"); }
     }
   };
 
   const handleConfirmReturn = async (id: number) => {
-    if (confirm("Հաստատո՞ւմ եք սարքի վերադարձը և ազատումը։")) {
+    if (confirm("Հաստատո՞ւմ եք վերադարձը:")) {
       try {
         const res = await confirmReturn(id);
-        if (res.success) {
-          alert("Սարքը հաջողությամբ վերադարձվեց պահեստ:");
-          loadInitialData();
-        } else {
-          alert(res.error || "Գործողությունը ձախողվեց");
-        }
-      } catch (err) {
-        alert("Գործողությունը չհաջողվեց");
-      }
+        if (res.success) loadInitialData();
+      } catch (err) { alert("Սխալ"); }
+    }
+  };
+
+  const handleAdminHandover = async (id: number) => {
+    if (confirm("Հաստատո՞ւմ եք հանձնումը:")) {
+      try {
+        const res = await confirmAdminHandover(id);
+        if (res.success) loadInitialData();
+      } catch (err) { alert("Սխալ"); }
     }
   };
 
   const handleAdminSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.userId || !formData.assetId) return alert("Խնդրում ենք լրացնել բոլոր դաշտերը");
-    
+    if (!formData.userId || !formData.assetId) return alert("Լրացրեք դաշտերը");
     setIsSubmitting(true);
     try {
       await createPermanentAssignment({
@@ -147,184 +141,196 @@ export default function AllReservationsPage() {
         assetId: parseInt(formData.assetId),
         start_time: formData.start_time
       });
-      alert("Սարքը հաջողությամբ կցվեց աշխատակցին (Անժամկետ):");
       setIsModalOpen(false);
       resetModal();
       await loadInitialData();
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      setIsSubmitting(false);
-    }
+    } catch (err: any) { alert(err.message); } finally { setIsSubmitting(false); }
   };
 
   const resetModal = () => {
     setSelectedAssetName("");
     setSerialSearch("");
-    setFormData({
-      userId: "",
-      assetId: "",
-      start_time: getNow(),
-    });
+    setFormData({ userId: "", assetId: "", start_time: getNow() });
   };
 
   const getStatusBadge = (res: any) => {
     const s = res.pickupStatus;
-    const commonStyle = "px-2 py-1 rounded-full text-[10px] font-bold uppercase shadow-sm border";
-    
-    // Եթե Ակտիվ ամրագրումների էջում ենք, հետ ենք տալիս հին լոգիկան
+    const commonStyle = "px-2 py-1 rounded-lg text-[10px] font-bold uppercase border shadow-sm inline-block";
     if (currentTab === 'active') {
-      if (s === 'USER_READY') return <span className={`${commonStyle} bg-purple-100 text-purple-800 border-purple-200`}>Պատրաստ է</span>;
-      if (s === 'IN_USE') return <span className={`${commonStyle} bg-blue-100 text-blue-800 border-blue-200`}>Վերցված է</span>;
-      return <span className={`${commonStyle} bg-green-100 text-green-800 border-green-200`}>Ամրագրված</span>;
+      if (s === 'USER_READY') return <span className={`${commonStyle} bg-purple-50 text-purple-700 border-purple-200`}>Պատրաստ է</span>;
+      if (s === 'IN_USE') return <span className={`${commonStyle} bg-blue-50 text-blue-700 border-blue-200`}>Վերցված է</span>;
+      return <span className={`${commonStyle} bg-indigo-50 text-indigo-700 border-indigo-200`}>Ամրագրված</span>;
     }
-
-    // Մնացած տաբերի (Permanent / Archive) համար նոր լոգիկան
     switch (s) {
-      case 'RETURNED': return <span className={`${commonStyle} bg-gray-100 text-gray-600 border-gray-200`}>Վերադարձված</span>;
+      case 'RETURNED': return <span className={`${commonStyle} bg-slate-100 text-slate-600 border-slate-200`}>Վերադարձված</span>;
       case 'CANCELLED': return <span className={`${commonStyle} bg-red-50 text-red-600 border-red-100`}>Չեղարկված</span>;
-      case 'IN_USE': return <span className={`${commonStyle} bg-blue-100 text-blue-800 border-blue-200`}>Օգտագործվում է</span>;
-      case 'RETURN_REQUESTED': return <span className={`${commonStyle} bg-yellow-100 text-yellow-800 border-yellow-200 animate-pulse`}>Վերադարձի հայտ</span>;
-      case 'USER_READY': return <span className={`${commonStyle} bg-purple-100 text-purple-800 border-purple-200`}>Պատրաստ է</span>;
-      case 'PENDING': return <span className={`${commonStyle} bg-orange-100 text-orange-800 border-orange-200`}>Սպասման մեջ</span>;
-      default: return <span className={`${commonStyle} bg-green-100 text-green-800 border-green-200`}>Կցված է</span>;
+      case 'IN_USE': return <span className={`${commonStyle} bg-blue-50 text-blue-700 border-blue-200`}>Օգտագործվում է</span>;
+      case 'RETURN_REQUESTED': return <span className={`${commonStyle} bg-amber-50 text-amber-700 border-amber-200 animate-pulse`}>Վերադարձի հայտ</span>;
+      default: return <span className={`${commonStyle} bg-emerald-50 text-emerald-700 border-emerald-200`}>Կցված է</span>;
     }
   };
 
   return (
-    <div className="p-8 text-black bg-gray-50 min-h-screen">
-      <div className="flex justify-between items-center mb-6 text-black">
-        <h1 className="text-2xl font-bold text-gray-800">Ամրագրումների Կառավարում</h1>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold shadow-md transition-all text-sm"
-        >
-          + Ստեղծել անժամկետ ամրագրում
-        </button>
+    <div className="bg-slate-200 min-h-screen font-sans text-slate-900 pb-12">
+      
+      {/* Navbar */}
+      <div className="bg-white/80 backdrop-blur-md border-b border-slate-300 px-6 py-6 sticky top-0 z-20 shadow-sm mb-6">
+        <div className="max-w-[1400px] mx-auto flex items-center justify-between">
+          <button 
+            onClick={() => router.back()} // Սա է "push back"-ը
+            className="flex items-center text-slate-500 hover:text-indigo-600 transition-all font-black uppercase text-[10px] tracking-widest group"
+          >
+            <ChevronLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+            <span className="ml-1">Հետ դեպի գլխավոր</span>
+          </button>
+
+          <div className="text-right">
+            <h1 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2 justify-end">
+              <CalendarCheck2 size={20} className="text-indigo-600" />
+              Ամրագրումներ
+            </h1>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">
+              Կառավարման վահանակ
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div className="flex gap-8 mb-6 border-b border-gray-200 bg-white px-6 rounded-t-xl shadow-sm">
-        {['active', 'permanent', 'archive'].map((tab) => (
+      <div className="px-8 max-w-[1400px] mx-auto">
+        
+        {/* Մեկ տողով` Տաբերը և Կոճակը */}
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex gap-2 bg-slate-300/50 p-1.5 rounded-2xl w-fit border border-slate-300">
+            {['active', 'permanent', 'archive'].map((tab) => (
+              <button 
+                key={tab} 
+                onClick={() => setCurrentTab(tab as any)} 
+                className={`px-8 py-2.5 rounded-xl text-xs font-black uppercase tracking-[0.1em] transition-all duration-300 ${currentTab === tab ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:bg-white/50 hover:text-slate-700'}`}
+              >
+                {tab === 'active' ? 'Ակտիվ' : tab === 'permanent' ? 'Անժամկետ' : 'Արխիվ'}
+              </button>
+            ))}
+          </div>
+
           <button 
-            key={tab}
-            onClick={() => setCurrentTab(tab as any)}
-            className={`py-4 px-2 text-sm font-bold transition-all relative ${currentTab === tab ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}`}
+            onClick={() => setIsModalOpen(true)} 
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-2xl font-bold shadow-lg shadow-indigo-200 transition-all active:scale-95 text-[11px] uppercase tracking-wider flex items-center gap-2"
           >
-            {tab === 'active' ? 'Ակտիվ ամրագրումներ' : tab === 'permanent' ? 'Անժամկետ (Assigned)' : 'Արխիվ'}
-            {currentTab === tab && <div className="absolute bottom-0 left-0 w-full h-1 bg-blue-600 rounded-t-full"></div>}
+            <PlusCircle size={16} />
+            Նոր անժամկետ կցում
           </button>
-        ))}
+        </div>
+
+        {/* Աղյուսակ */}
+        <div className="bg-slate-50 rounded-[2.5rem] shadow-2xl border border-slate-300 overflow-hidden">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-slate-100/80 border-b border-slate-200">
+              <tr className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                <th className="p-5 w-24">ID</th>
+                <th className="p-5">Օգտատեր</th>
+                <th className="p-5">Հեռախոս</th>
+                <th className="p-5">Սարք</th>
+                <th className="p-5">Սերիա</th>
+                <th className="p-5 text-center">Ժամանակաշրջան</th>
+                <th className="p-5 text-center">Կարգավիճակ</th>
+                <th className="p-5">Գործողություն</th>
+              </tr>
+              <tr className="bg-white/50 border-b border-slate-100">
+                <th className="px-5 pb-4"><input type="text" className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold outline-none focus:border-indigo-400 bg-white transition-all" placeholder="ID" value={idSearch} onChange={e => setIdSearch(e.target.value)} /></th>
+                <th className="px-5 pb-4"><input type="text" className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold outline-none focus:border-indigo-400 bg-white transition-all" placeholder="Անուն" value={userSearch} onChange={e => setUserSearch(e.target.value)} /></th>
+                <th colSpan={6}></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white/30 backdrop-blur-sm">
+              {loading ? (
+                <tr><td colSpan={8} className="p-32 text-center text-slate-400 font-black uppercase tracking-widest animate-pulse">Բեռնվում է...</td></tr>
+              ) : filteredData.length === 0 ? (
+                <tr><td colSpan={8} className="p-32 text-center text-slate-300 font-bold italic">Տվյալներ չկան</td></tr>
+              ) : filteredData.map((res) => {
+                const hasConfirmAction = 
+                  res.pickupStatus === 'USER_READY' || 
+                  (currentTab === 'permanent' && res.pickupStatus === 'RETURN_REQUESTED');
+
+                return (
+                  <tr key={res.id} className="hover:bg-indigo-50/30 transition-all duration-300">
+                    <td className="p-5 text-xs font-black text-indigo-600">#{res.id}</td>
+                    <td className="p-5 text-sm font-black text-slate-800">{res.users?.full_name}</td>
+                    <td className="p-5 text-xs font-mono font-bold text-slate-500">{res.users?.phone_number || "—"}</td>
+                    <td className="p-5 text-sm font-black text-slate-700">{res.assets?.name}</td>
+                    <td className="p-5 text-xs font-mono font-bold text-slate-400">{res.assets?.serial_number}</td>
+                    <td className="p-5 text-center">
+                      <div className="text-[11px] font-black text-slate-700 bg-slate-100 rounded-md py-1 px-2 inline-block mb-1">{formatDateTime(res.start_time)}</div>
+                      <div className="text-[11px] font-black text-slate-500 block uppercase">
+                        {res.end_time && new Date(res.end_time).getUTCFullYear() < 9000 ? formatDateTime(res.end_time) : "— անժամկետ —"}
+                      </div>
+                    </td>
+                    <td className="p-5 text-center">{getStatusBadge(res)}</td>
+                    <td className="p-5">
+                      <div className="flex flex-col gap-2">
+                        {res.pickupStatus === 'USER_READY' && (
+                          <button onClick={() => handleAdminHandover(res.id)} className="bg-emerald-600 text-white font-black text-[9px] px-4 py-2 rounded-xl shadow-lg shadow-emerald-100 hover:bg-emerald-700 uppercase transition-all active:scale-95">Հաստատել հանձնումը</button>
+                        )}
+                        {currentTab === 'permanent' && res.pickupStatus === 'RETURN_REQUESTED' && (
+                          <button onClick={() => handleConfirmReturn(res.id)} className="bg-emerald-600 text-white font-black text-[9px] px-4 py-2 rounded-xl shadow-lg shadow-emerald-100 hover:bg-emerald-700 uppercase transition-all active:scale-95">Հաստատել վերադարձը</button>
+                        )}
+                        {!hasConfirmAction && currentTab !== 'archive' && (
+                          <button onClick={() => handleDelete(res.id)} className="text-red-500 font-black text-[10px] hover:text-red-700 uppercase tracking-tighter text-left">
+                            {currentTab === 'permanent' ? 'Ազատել սարքը' : 'Չեղարկել'}
+                          </button>
+                        )}
+                        {currentTab === 'archive' && <span className="text-slate-300 font-bold uppercase text-[10px]">Արխիվ</span>}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
-      
+
+      {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 border border-gray-200">
-            <h2 className="text-lg font-bold mb-4 border-b pb-2 text-blue-800">Նոր անժամկետ կցում</h2>
-            <form onSubmit={handleAdminSubmit} className="space-y-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-50 rounded-[2.5rem] shadow-2xl w-full max-w-md p-10 border border-white relative overflow-hidden">
+            <h2 className="text-2xl font-black mb-8 text-slate-800 uppercase tracking-tight border-b border-slate-200 pb-4">Կցել սարքը</h2>
+            <form onSubmit={handleAdminSubmit} className="space-y-6">
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Աշխատակից</label>
-                <select className="w-full border rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white text-black" required value={formData.userId} onChange={(e) => setFormData({...formData, userId: e.target.value})}>
-                  <option value="">Ընտրել վարչական աշխատողին</option>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Աշխատակից</label>
+                <select className="w-full border border-slate-200 rounded-2xl p-4 text-sm font-bold bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm" required value={formData.userId} onChange={e => setFormData({...formData, userId: e.target.value})}>
+                  <option value="">Ընտրել աշխատակից</option>
                   {staff.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Սարքի տեսակ</label>
-                <select className="w-full border rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white text-black" required value={selectedAssetName} onChange={(e) => { setSelectedAssetName(e.target.value); setFormData({...formData, assetId: ""}); }}>
-                  <option value="">Ընտրել սարքի անվանումը</option>
-                  {assetNames.map((name) => <option key={name} value={name}>{name}</option>)}
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Սարքի տեսակ</label>
+                <select className="w-full border border-slate-200 rounded-2xl p-4 text-sm font-bold bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm" required value={selectedAssetName} onChange={e => { setSelectedAssetName(e.target.value); setFormData({...formData, assetId: ""}); }}>
+                  <option value="">Ընտրել սարքը</option>
+                  {assetNames.map(n => <option key={n} value={n}>{n}</option>)}
                 </select>
               </div>
               {selectedAssetName && (
-                <div className="pt-2 border-t">
-                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Որոնել սերիական համարը</label>
-                  <input type="text" placeholder="Մուտքագրեք սերիան..." className="w-full border border-blue-200 rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 mb-2 bg-blue-50/20 text-black font-mono" value={serialSearch} onChange={(e) => setSerialSearch(e.target.value)} />
-                  <select className="w-full border rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 font-mono bg-white text-black" required size={4} value={formData.assetId} onChange={(e) => setFormData({...formData, assetId: e.target.value})}>
-                    {filteredSerials.map(a => <option key={a.id} value={a.id} className="p-1">{a.serial_number}</option>)}
+                <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 shadow-inner">
+                  <input type="text" placeholder="Որոնել սերիան..." className="w-full border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold mb-3 outline-none focus:border-indigo-400 bg-white" value={serialSearch} onChange={e => setSerialSearch(e.target.value)} />
+                  <select className="w-full border border-slate-200 rounded-xl p-2 text-xs font-mono font-bold bg-white outline-none h-32" required size={4} value={formData.assetId} onChange={e => setFormData({...formData, assetId: e.target.value})}>
+                    {filteredSerials.map(a => <option key={a.id} value={a.id} className="p-2 hover:bg-indigo-100 rounded-lg cursor-pointer"># {a.serial_number}</option>)}
                   </select>
                 </div>
               )}
               <div>
-                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Կցման սկիզբ</label>
-                <input type="datetime-local" className="w-full border rounded p-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white text-black" value={formData.start_time} onChange={(e) => setFormData({...formData, start_time: e.target.value})} />
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Կցման սկիզբ</label>
+                <input type="datetime-local" className="w-full border border-slate-200 rounded-2xl p-4 text-sm font-bold bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm" value={formData.start_time} onChange={e => setFormData({...formData, start_time: e.target.value})} />
               </div>
-              <div className="flex gap-2 pt-2">
-                <button type="button" onClick={() => { setIsModalOpen(false); resetModal(); }} className="flex-1 px-4 py-2 text-sm font-bold text-gray-600 hover:bg-gray-100 rounded-lg">Չեղարկել</button>
-                <button type="submit" disabled={isSubmitting} className="flex-1 px-4 py-2 text-sm font-bold bg-blue-600 text-white rounded-lg">{isSubmitting ? "..." : "Հաստատել"}</button>
+              <div className="flex gap-6 pt-6">
+                <button type="button" onClick={() => { setIsModalOpen(false); resetModal(); }} className="flex-1 text-slate-400 font-black hover:text-slate-600 transition-colors uppercase text-xs tracking-widest">Չեղարկել</button>
+                <button type="submit" disabled={isSubmitting} className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all uppercase text-[11px] tracking-widest">
+                  {isSubmitting ? "..." : "Հաստատել"}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
-
-      <div className="bg-white shadow-xl rounded-b-xl overflow-hidden border border-gray-200">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-3 py-4 text-left align-top w-20">
-                <span className="block text-xs font-bold text-gray-500 uppercase mb-2">ID</span>
-                <input type="text" placeholder="#" className="block w-full border border-gray-300 rounded px-1 py-1 text-sm bg-white text-black" value={idSearch} onChange={(e) => setIdSearch(e.target.value)} />
-              </th>
-              <th className="px-4 py-4 text-left align-top">
-                <span className="block text-xs font-bold text-gray-500 uppercase mb-2">Օգտատեր</span>
-                <input type="text" placeholder="🔍 որոնել..." className="block w-full border border-gray-300 rounded px-2 py-1 text-sm bg-white text-black" value={userSearch} onChange={(e) => setUserSearch(e.target.value)} />
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-500 uppercase align-top">Հեռախոս</th>
-              <th className="px-4 py-4 text-left align-top">
-                <span className="block text-xs font-bold text-gray-500 uppercase mb-2">Սարք</span>
-                <select className="block w-full border border-gray-300 rounded px-1 py-1 text-sm bg-white text-black" value={assetNameFilter} onChange={(e) => setAssetNameFilter(e.target.value)}>
-                  <option value="all">Բոլորը</option>
-                  {assetNames.map(n => <option key={n} value={n}>{n}</option>)}
-                </select>
-              </th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-500 uppercase align-top">Սերիա</th>
-              <th className="px-4 py-4 text-center text-xs font-bold text-gray-500 uppercase align-top">Ժամանակաշրջան</th>
-              <th className="px-4 py-4 text-center text-xs font-bold text-gray-500 uppercase align-top">Կարգավիճակ</th>
-              <th className="px-4 py-4 text-left text-xs font-bold text-gray-500 uppercase align-top">Գործողություն</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200 text-black">
-            {loading && reservations.length === 0 ? (
-               <tr><td colSpan={8} className="py-20 text-center text-gray-400 font-bold">Բեռնվում է...</td></tr>
-            ) : filteredData.map((res: any) => (
-              <tr key={res.id} className="hover:bg-blue-50/50 transition-colors">
-                <td className="px-3 py-4 text-xs font-bold text-blue-600 bg-blue-50/30">#{res.id}</td>
-                <td className="px-4 py-4 text-sm font-semibold">{res.users?.full_name}</td>
-                <td className="px-4 py-4 text-sm text-gray-600 font-mono">{res.users?.phone_number || "—"}</td>
-                <td className="px-4 py-4 text-sm font-bold text-gray-800">{res.assets?.name}</td>
-                <td className="px-4 py-4 text-xs font-mono text-gray-500">{res.assets?.serial_number}</td>
-                <td className="px-4 py-4 text-xs text-center text-gray-700">
-                  <div className="font-bold text-blue-700">{formatDateTime(res.start_time)}</div>
-                  <div className="text-gray-400 mt-1">
-                    {res.end_time && new Date(res.end_time).getUTCFullYear() < 9000 ? formatDateTime(res.end_time) : "— անժամկետ —"}
-                  </div>
-                </td>
-                <td className="px-4 py-4 text-center">{getStatusBadge(res)}</td>
-                <td className="px-4 py-4 text-sm">
-                  <div className="flex gap-3">
-                    {/* Վերադարձի հաստատումը ԵՐԵՎՈՒՄ Է ՄԻԱՅՆ PERMANENT TAB-ՈՒՄ */}
-                    {currentTab === 'permanent' && res.pickupStatus === 'RETURN_REQUESTED' && (
-                      <button 
-                        onClick={() => handleConfirmReturn(res.id)} 
-                        className="text-green-600 font-bold hover:underline cursor-pointer"
-                      >
-                        Հաստատել վերադարձը
-                      </button>
-                    )}
-
-                    {currentTab !== 'archive' && (
-                      <button onClick={() => handleDelete(res.id)} className="text-red-600 font-bold hover:underline cursor-pointer">
-                        {currentTab === 'permanent' ? 'Ազատել' : 'Չեղարկել'}
-                      </button>
-                    )}
-                    {currentTab === 'archive' && <span className="text-gray-400 italic text-xs">Արխիվացված</span>}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
