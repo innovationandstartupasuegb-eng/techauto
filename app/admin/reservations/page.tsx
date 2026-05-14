@@ -1,7 +1,7 @@
 'use client';
-
+import AdminNotificationModal from "@/components/AdminNotificationModal";
 import { useState, useEffect, useMemo } from "react";
-import { useRouter } from "next/navigation"; // Ավելացվեց սա
+import { useRouter } from "next/navigation";
 import { ChevronLeft, CalendarCheck2, PlusCircle } from 'lucide-react';
 import { 
   getReservations, 
@@ -15,7 +15,7 @@ import {
 } from "@/app/actions/reservation";
 
 export default function AllReservationsPage() {
-  const router = useRouter(); // Initialize router
+  const router = useRouter();
   const [reservations, setReservations] = useState<any[]>([]);
   const [assetNames, setAssetNames] = useState<string[]>([]);
   const [staff, setStaff] = useState<any[]>([]);
@@ -107,18 +107,25 @@ export default function AllReservationsPage() {
     if (confirm(message)) {
       try {
         await deleteReservation(id);
-        setReservations(prev => prev.filter(r => r.id !== id));
         loadInitialData();
       } catch (err) { alert("Սխալ"); }
     }
   };
 
+  // ՈՒՂՂՎԱԾ ԵՎ ԱՊԱՀՈՎԱՑՎԱԾ ՖՈՒՆԿՑԻԱ
   const handleConfirmReturn = async (id: number) => {
-    if (confirm("Հաստատո՞ւմ եք վերադարձը:")) {
-      try {
-        const res = await confirmReturn(id);
-        if (res.success) loadInitialData();
-      } catch (err) { alert("Սխալ"); }
+    if (!window.confirm("Հաստատո՞ւմ եք սարքի վերադարձը դեպի պահեստ:")) return;
+    
+    try {
+      const res = await confirmReturn(id);
+      if (res && res.success) {
+        await loadInitialData();
+      } else {
+        alert("Սերվերը չկարողացավ հաստատել վերադարձը։");
+      }
+    } catch (err: any) { 
+      console.error("Վերադարձի սխալ:", err);
+      alert("Տեղի ունեցավ սխալ. " + (err.message || "Կապի խնդիր")); 
     }
   };
 
@@ -156,10 +163,11 @@ export default function AllReservationsPage() {
   const getStatusBadge = (res: any) => {
     const s = res.pickupStatus;
     const commonStyle = "px-2 py-1 rounded-lg text-[10px] font-bold uppercase border shadow-sm inline-block";
+    
     if (currentTab === 'active') {
-      if (s === 'USER_READY') return <span className={`${commonStyle} bg-purple-50 text-purple-700 border-purple-200`}>Պատրաստ է</span>;
-      if (s === 'IN_USE') return <span className={`${commonStyle} bg-blue-50 text-blue-700 border-blue-200`}>Վերցված է</span>;
-      return <span className={`${commonStyle} bg-indigo-50 text-indigo-700 border-indigo-200`}>Ամրագրված</span>;
+     if (s === 'USER_READY') return <span className={`${commonStyle} bg-purple-50 text-purple-700 border-purple-200`}>Պատրաստ է</span>;
+     if (s === 'IN_USE') return <span className={`${commonStyle} bg-blue-600 text-white border-blue-700 shadow-md`}>Վերցված է</span>;
+     return <span className={`${commonStyle} bg-indigo-50 text-indigo-500 border-indigo-100`}>Ամրագրված</span>;
     }
     switch (s) {
       case 'RETURNED': return <span className={`${commonStyle} bg-slate-100 text-slate-600 border-slate-200`}>Վերադարձված</span>;
@@ -172,12 +180,13 @@ export default function AllReservationsPage() {
 
   return (
     <div className="bg-slate-200 min-h-screen font-sans text-slate-900 pb-12">
+      <AdminNotificationModal />
       
       {/* Navbar */}
       <div className="bg-white/80 backdrop-blur-md border-b border-slate-300 px-6 py-6 sticky top-0 z-20 shadow-sm mb-6">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <button 
-            onClick={() => router.back()} // Սա է "push back"-ը
+            onClick={() => router.back()}
             className="flex items-center text-slate-500 hover:text-indigo-600 transition-all font-black uppercase text-[10px] tracking-widest group"
           >
             <ChevronLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
@@ -189,16 +198,12 @@ export default function AllReservationsPage() {
               <CalendarCheck2 size={20} className="text-indigo-600" />
               Ամրագրումներ
             </h1>
-            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">
-              Կառավարման վահանակ
-            </p>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Կառավարման վահանակ</p>
           </div>
         </div>
       </div>
 
       <div className="px-8 max-w-[1400px] mx-auto">
-        
-        {/* Մեկ տողով` Տաբերը և Կոճակը */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex gap-2 bg-slate-300/50 p-1.5 rounded-2xl w-fit border border-slate-300">
             {['active', 'permanent', 'archive'].map((tab) => (
@@ -221,7 +226,6 @@ export default function AllReservationsPage() {
           </button>
         </div>
 
-        {/* Աղյուսակ */}
         <div className="bg-slate-50 rounded-[2.5rem] shadow-2xl border border-slate-300 overflow-hidden">
           <table className="w-full text-left border-collapse">
             <thead className="bg-slate-100/80 border-b border-slate-200">
@@ -236,8 +240,12 @@ export default function AllReservationsPage() {
                 <th className="p-5">Գործողություն</th>
               </tr>
               <tr className="bg-white/50 border-b border-slate-100">
-                <th className="px-5 pb-4"><input type="text" className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold outline-none focus:border-indigo-400 bg-white transition-all" placeholder="ID" value={idSearch} onChange={e => setIdSearch(e.target.value)} /></th>
-                <th className="px-5 pb-4"><input type="text" className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold outline-none focus:border-indigo-400 bg-white transition-all" placeholder="Անուն" value={userSearch} onChange={e => setUserSearch(e.target.value)} /></th>
+                <th className="px-5 pb-4">
+                  <input type="text" className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold outline-none focus:border-indigo-400 bg-white" placeholder="ID" value={idSearch} onChange={e => setIdSearch(e.target.value)} />
+                </th>
+                <th className="px-5 pb-4">
+                  <input type="text" className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold outline-none focus:border-indigo-400 bg-white" placeholder="Անուն" value={userSearch} onChange={e => setUserSearch(e.target.value)} />
+                </th>
                 <th colSpan={6}></th>
               </tr>
             </thead>
@@ -249,7 +257,7 @@ export default function AllReservationsPage() {
               ) : filteredData.map((res) => {
                 const hasConfirmAction = 
                   res.pickupStatus === 'USER_READY' || 
-                  (currentTab === 'permanent' && res.pickupStatus === 'RETURN_REQUESTED');
+                  res.pickupStatus === 'RETURN_REQUESTED';
 
                 return (
                   <tr key={res.id} className="hover:bg-indigo-50/30 transition-all duration-300">
@@ -268,13 +276,15 @@ export default function AllReservationsPage() {
                     <td className="p-5">
                       <div className="flex flex-col gap-2">
                         {res.pickupStatus === 'USER_READY' && (
-                          <button onClick={() => handleAdminHandover(res.id)} className="bg-emerald-600 text-white font-black text-[9px] px-4 py-2 rounded-xl shadow-lg shadow-emerald-100 hover:bg-emerald-700 uppercase transition-all active:scale-95">Հաստատել հանձնումը</button>
+                          <button onClick={() => handleAdminHandover(res.id)} className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[9px] px-4 py-2 rounded-xl uppercase shadow-md transition-all active:scale-95">Հաստատել հանձնումը</button>
                         )}
-                        {currentTab === 'permanent' && res.pickupStatus === 'RETURN_REQUESTED' && (
-                          <button onClick={() => handleConfirmReturn(res.id)} className="bg-emerald-600 text-white font-black text-[9px] px-4 py-2 rounded-xl shadow-lg shadow-emerald-100 hover:bg-emerald-700 uppercase transition-all active:scale-95">Հաստատել վերադարձը</button>
+                        
+                        {res.pickupStatus === 'RETURN_REQUESTED' && (
+                          <button onClick={() => handleConfirmReturn(res.id)} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-[9px] px-4 py-2 rounded-xl uppercase shadow-md animate-pulse transition-all active:scale-95">Հաստատել վերադարձը</button>
                         )}
+
                         {!hasConfirmAction && currentTab !== 'archive' && (
-                          <button onClick={() => handleDelete(res.id)} className="text-red-500 font-black text-[10px] hover:text-red-700 uppercase tracking-tighter text-left">
+                          <button onClick={() => handleDelete(res.id)} className="text-red-500 font-black text-[10px] uppercase text-left">
                             {currentTab === 'permanent' ? 'Ազատել սարքը' : 'Չեղարկել'}
                           </button>
                         )}

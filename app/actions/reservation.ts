@@ -6,16 +6,6 @@ import { authOptions } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
 
-
-/**
- * Օգնող ֆունկցիա՝ ամսաթիվը UTC ձևաչափի բերելու համար։
- * Հեռացրել ենք ստիպողաբար 'Z' ավելացնելը, որպեսզի JS-ը ճիշտ հասկանա տեղական ժամը։
- */
-const parseToUTC = (isoString: string) => {
-  if (!isoString) return new Date("Invalid");
-  return new Date(isoString);
-};
-
 // --- ՎԱԼԻԴԱՑԻԱՅԻ ՖՈՒՆԿՑԻԱՆԵՐ ---
 
 export async function requestPickup(reservationId: number) {
@@ -50,21 +40,17 @@ export async function getAssets() {
 
 export async function confirmAdminHandover(reservationId: number) {
   try {
-    // 1. Նախ գտնում ենք ամրագրումը, որպեսզի տեսնենք՝ արդյոք այն անժամկետ է
     const reservation = await prisma.reservations.findUnique({
       where: { id: reservationId },
-      select: { end_time: true } // մեզ միայն սա է պետք ստուգելու համար
+      select: { end_time: true }
     });
 
     if (!reservation) throw new Error("Ամրագրումը չի գտնվել");
 
-    // 2. Թարմացնում ենք տվյալները
     await prisma.reservations.update({
       where: { id: reservationId },
       data: { 
         pickupStatus: 'IN_USE',
-        // Եթե end_time-ը null է, նշանակում է սա անժամկետ կցում է
-        // և մենք status-ը Reserved-ից սարքում ենք Assigned
         status: reservation.end_time === null ? 'Assigned' : 'Reserved'
       },
     });
@@ -89,14 +75,13 @@ export async function getAvailableSlots(assetId: number, dateString: string) {
         asset_id: assetId,
         status: { in: ['Reserved', 'Assigned'] },
         OR: [
-          // 1. Սովորական ամրագրումներ, որոնք ինչ-որ կերպ հատվում են այս օրվա հետ
           {
             AND: [
               { start_time: { lte: endOfDay } },
               { 
                 OR: [
                   { end_time: { gte: startOfDay } },
-                  { end_time: null } // Սա ընդգրկում է անժամկետները
+                  { end_time: null }
                 ] 
               }
             ]
@@ -130,10 +115,11 @@ export async function getStaffUsers() {
   }
 }
 
+// ՈՒՂՂՎԱԾ. Ավելացվել է ժամանակի խիստ ստուգում անցյալի դեմ
 export async function createPermanentAssignment(data: {
   assetId: number;
   userId: number;
-  start_time: string; // Սա գալիս է input-ից
+  start_time: string;
 }) {
   try {
     const session = await getServerSession(authOptions);
@@ -141,11 +127,14 @@ export async function createPermanentAssignment(data: {
       throw new Error("Այս գործողությունը թույլատրված է միայն ադմինին։");
     }
 
-    // 1. Ստեղծում ենք ժամանակավոր Date օբյեկտ
     const checkStartTime = new Date(data.start_time);
+    
+    // ՍՏՈՒԳՈՒՄ. Եթե ընտրված ժամը հետ է ընթացիկ պահից (5 րոպեի թույլտվությամբ)
+    const now = new Date();
+    if (checkStartTime.getTime() < now.getTime() - (5 * 60 * 1000)) {
+      throw new Error("Հնարավոր չէ սարքը կցել անցյալ ժամանակով։");
+    }
 
-    // 2. Պատրաստում ենք վերջնական ժամը բազայի համար (UTC+4 ուղղումով)
-    // Այս հատվածը վերցրված է քո սովորական ամրագրման կոդից
     const offset = 4 * 60 * 60 * 1000; 
     const newStartTime = new Date(checkStartTime.getTime() + offset);
 
@@ -154,13 +143,11 @@ export async function createPermanentAssignment(data: {
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      
-      // 3. Կոնֆլիկտի ստուգում (որպեսզի նույն սարքը նույն ժամին չկրկնվի)
       const conflict = await tx.reservations.findFirst({
         where: {
           asset_id: Number(data.assetId),
           status: { in: ['Reserved', 'Assigned'] },
-          pickupStatus: { not: 'CANCELLED' }, // Միայն ակտիվները
+          pickupStatus: { not: 'CANCELLED' },
           AND: [
             { OR: [{ end_time: { gt: newStartTime } }, { end_time: null }] }
           ]
@@ -171,19 +158,17 @@ export async function createPermanentAssignment(data: {
         throw new Error("Այս սարքն արդեն զբաղված է նշված ժամին:");
       }
 
-      // 4. Ստեղծում ենք ամրագրումը (end_time: null)
       const reservation = await tx.reservations.create({
         data: {
           asset_id: Number(data.assetId),
           user_id: Number(data.userId),
           start_time: newStartTime,
           end_time: null, 
-          status: 'Reserved', // Սկզբից Reserved, որ երևա ակտիվներում
+          status: 'Reserved', 
           pickupStatus: 'PENDING'
         },
       });
 
-      // 5. Սարքը նշում ենք որպես Assigned
       await tx.assets.update({
         where: { id: Number(data.assetId) },
         data: { status: 'Assigned' },
@@ -214,11 +199,16 @@ export async function createReservation(data: {
 
     const user = session.user as any;
     
-    // 1. Ստեղծում ենք ժամանակավոր Date օբյեկտներ՝ ստուգման համար
     const checkStartTime = new Date(data.start_time);
     const checkEndTime = data.end_time ? new Date(data.end_time) : null;
 
-    // 2. ՍՏՈՒԳՈՒՄ (Անում ենք սա նախքան 4 ժամ ավելացնելը)
+    // ՍՏՈՒԳՈՒՄ 1. Անցյալ ժամանակի արգելք ուսանողների համար
+    const now = new Date();
+    if (checkStartTime.getTime() < now.getTime() - (5 * 60 * 1000)) {
+      throw new Error("Ամրագրումը անցյալ ժամանակով հնարավոր չէ։");
+    }
+
+    // ՍՏՈՒԳՈՒՄ 2. 17:20-ի սահմանափակում
     if (data.end_time && checkEndTime) {
       const limit = new Date(checkStartTime);
       limit.setHours(17, 20, 0, 0); 
@@ -228,7 +218,6 @@ export async function createReservation(data: {
       }
     }
 
-    // 3. Պատրաստում ենք վերջնական ժամերը բազայի համար (UTC+4 ուղղումով)
     const offset = 4 * 60 * 60 * 1000; 
     const newStartTime = new Date(checkStartTime.getTime() + offset);
     const newEndTime = data.end_time 
@@ -239,7 +228,6 @@ export async function createReservation(data: {
       throw new Error("Ամսաթվի ձևաչափը սխալ է։");
     }
 
-    // --- ՄՆԱՑԱԾԸ ՄՆՈՒՄ Է ԱՆՓՈՓՈԽ ---
     const result = await prisma.$transaction(async (tx: any) => {
       let targetAssetId: number;
 
@@ -312,10 +300,9 @@ export async function createReservation(data: {
     return { success: true, data: result };
 
   } catch (error: any) {
-    throw new Error(error.message || "Ամրագրումը ձախողվեց։");
+    return { success: false, error: error.message || "Ամրագրումը ձախողվեց։" };
   }
 }
-
 
 export async function deleteReservation(id: number) {
   try {
@@ -334,14 +321,11 @@ export async function deleteReservation(id: number) {
       throw new Error("Իրավասություն չունեք");
     }
 
-    // Օգտագործում ենք տրանզակցիա, որպեսզի թե՛ ջնջվի, թե՛ սարքը ազատվի միաժամանակ
     await prisma.$transaction(async (tx) => {
-      // 1. Ջնջում ենք ամրագրումը
       await tx.reservations.delete({ 
         where: { id: id } 
       });
 
-      // 2. Եթե ամրագրումը կապված էր սարքի հետ, սարքը սարքում ենք Available
       if (reservation.asset_id) {
         await tx.assets.update({
           where: { id: reservation.asset_id },
@@ -350,15 +334,14 @@ export async function deleteReservation(id: number) {
       }
     });
 
-    // ԿԱՐԵՎՈՐ: revalidatePath-ը պետք է կանչվի տրանզակցիայից ԴՈՒՐՍ
     revalidatePath('/myreservations'); 
     revalidatePath('/admin/reservations');
-    revalidatePath('/reserve'); // Ավելացրու սա, որ ամրագրման էջն էլ թարմանա
+    revalidatePath('/reserve'); 
     
     return { success: true };
   } catch (error: any) {
     console.error("Delete Error:", error.message);
-    throw error;
+    return { success: false, error: error.message };
   }
 }
 
@@ -371,7 +354,6 @@ export async function getReservations(type: 'active' | 'permanent' | 'archive' |
     const userId = parseInt((session.user as any).id);
 
     if (isNaN(userId)) {
-      console.error("Invalid User ID format");
       return [];
     }
 
@@ -379,12 +361,10 @@ export async function getReservations(type: 'active' | 'permanent' | 'archive' |
 
     let whereClause: any = {};
 
-    // 1. Եթե ադմին չէ, պարտադիր ֆիլտրում ենք ըստ իր ID-ի
     if (userRole !== 'admin') {
       whereClause.user_id = userId;
     }
 
-    // 2. Ֆիլտրերի տրամաբանությունը
     switch (type) {
       case 'active':
         whereClause.status = 'Reserved';
@@ -398,8 +378,6 @@ export async function getReservations(type: 'active' | 'permanent' | 'archive' |
         whereClause.pickupStatus = { in: ['RETURNED', 'CANCELLED'] };
         break;
       case 'all':
-        // «all» տարբերակը օգտատիրոջ էջի համար է, որտեղ պետք է բերել ամեն ինչ
-        // Բացի չեղարկվածներից և վերադարձվածներից (կամ կարող եք թողնել ամեն ինչ)
         whereClause.pickupStatus = { notIn: ['RETURNED', 'CANCELLED'] };
         break;
     }
@@ -419,7 +397,6 @@ export async function getReservations(type: 'active' | 'permanent' | 'archive' |
     return [];
   }
 }
-
 
 export async function getUniqueAssetNames() {
   try {
@@ -460,18 +437,16 @@ export async function confirmReturn(reservationId: number) {
     if (!reservation) throw new Error("Ամրագրումը չի գտնվել");
 
     await prisma.$transaction([
-      // 1. Թարմացնում ենք ամրագրումը (Reservation)
       prisma.reservations.update({
         where: { id: reservationId },
         data: { 
-          pickupStatus: 'RETURNED', // Սա ձեր նշած enum-ն է
-          status: 'Available'      // Սա էլ Reservations-ի status enum-ն է
+          pickupStatus: 'RETURNED', 
+          status: 'Available'      
         }
       }),
-      // 2. Թարմացնում ենք սարքը (Asset)
       prisma.assets.update({
         where: { id: reservation.asset_id! },
-        data: { status: 'Available' } // Սարքը ևս դառնում է Available (ազատ)
+        data: { status: 'Available' } 
       })
     ]);
 
@@ -485,22 +460,16 @@ export async function confirmReturn(reservationId: number) {
   }
 }
 
-
-// ... (նախորդ կոդը մնում է նույնը մինչև cleanupExpiredReservations ֆունկցիան)
 export async function cleanupExpiredReservations() {
   try {
-    // Օգտագործում ենք ստանդարտ Date(), որը Prisma-ն ճիշտ կհամադրի բազայի հետ
     const now = new Date();
-    
-    // Շեմը (threshold) հաշվարկում ենք ընթացիկ պահից 30 րոպե հետ
     const startThreshold = new Date(now.getTime() - (30 * 60 * 1000));
 
-    // --- 1. ԱՎՏՈՄԱՏ ԱԿՏԻՎԱՑՈՒՄ (Միայն Ադմինների համար) ---
     const adminToActivate = await prisma.reservations.findMany({
       where: {
         pickupStatus: 'PENDING',
-        start_time: { lte: now }, // Օգտագործում ենք 'now'
-        end_time: { not: null },  // Անժամկետներին ձեռք չտալ
+        start_time: { lte: now }, 
+        end_time: { not: null },  
         users: { role: 'admin' }
       }
     });
@@ -512,13 +481,12 @@ export async function cleanupExpiredReservations() {
       });
     }
 
-    // --- 2. ԱՎՏՈՄԱՏ ԱՎԱՐՏՈՒՄ (Միայն Ադմինների համար) ---
     const adminToFinish = await prisma.reservations.findMany({
       where: {
         pickupStatus: 'IN_USE',
         end_time: { 
-          not: null, // Անժամկետ սարքը երբեք ավտոմատ չի ավարտվում
-          lt: now    // Օգտագործում ենք 'now'
+          not: null, 
+          lt: now    
         },
         users: { role: 'admin' }
       }
@@ -540,13 +508,12 @@ export async function cleanupExpiredReservations() {
       ]);
     }
 
-    // --- 3. ՈՒՍԱՆՈՂՆԵՐԻ/ԱՇԽԱՏՈՂՆԵՐԻ ԺԱՄԿԵՏԱՆՑՆԵՐԻ ՉԵՂԱՐԿՈՒՄ ---
     const expiredStudent = await prisma.reservations.findMany({
       where: {
         pickupStatus: 'PENDING',
-        NOT: { end_time: null }, // Անժամկետ կցումները երբեք չեն չեղարկվում
+        NOT: { end_time: null }, 
         OR: [
-          { end_time: { lt: now } },          // Օգտագործում ենք 'now'
+          { end_time: { lt: now } },          
           { start_time: { lt: startThreshold } }
         ]
       }
@@ -574,29 +541,27 @@ export async function cleanupExpiredReservations() {
 }
 
 export async function getPendingRequests() {
-  // Ստեղծում ենք սերվերային կապը
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
+    revalidatePath('/', 'layout');
 
-  // Հարցնում ենք միայն անհրաժեշտ սյունակները և միայն ակտիվ ստատուսները
-  const { data, error } = await supabase
-    .from('reservations')
-    .select(`
-      id, 
-      pickupStatus, 
-      assets (
-        name, 
-        serial_number
-      ), 
-      users (
-        full_name
-      )
-    `)
-    .in('pickupStatus', ['USER_READY', 'RETURN_REQUESTED']);
+    const { data, error } = await supabase
+      .from('reservations')
+      .select(`
+        id, 
+        pickupStatus, 
+        assets (name, serial_number), 
+        users (full_name)
+      `)
+      .in('pickupStatus', ['USER_READY', 'RETURN_REQUESTED']);
 
-  if (error) {
-    console.error("Supabase Error:", error.message);
+    if (error) {
+      console.error("Supabase Error:", error.message);
+      return [];
+    }
+    return data || [];
+  } catch (e) {
+    console.error("Supabase action wrapper error:", e);
     return [];
   }
-    
-  return data;
 }
