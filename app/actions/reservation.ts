@@ -5,7 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
-
+import { cache } from 'react'; // ԱՎԵԼԱՑՐՈՒ ԱՅՍ ՏՈՂԸ ՖԱՅԼԻ ԱՄԵՆԱՎԵՐԵՎՈՒՄ
 // --- ՎԱԼԻԴԱՑԻԱՅԻ ՖՈՒՆԿՑԻԱՆԵՐ ---
 
 export async function requestPickup(reservationId: number) {
@@ -202,13 +202,26 @@ export async function createReservation(data: {
     const checkStartTime = new Date(data.start_time);
     const checkEndTime = data.end_time ? new Date(data.end_time) : null;
 
-    // ՍՏՈՒԳՈՒՄ 1. Անցյալ ժամանակի արգելք ուսանողների համար
-    const now = new Date();
-    if (checkStartTime.getTime() < now.getTime() - (5 * 60 * 1000)) {
-      throw new Error("Ամրագրումը անցյալ ժամանակով հնարավոր չէ։");
+    // 1. Հաշվարկում ենք ճիշտ ժամային գոտու offset-ը (+4 ժամ)
+    const offset = 4 * 60 * 60 * 1000; 
+    const newStartTime = new Date(checkStartTime.getTime() + offset);
+    const newEndTime = data.end_time 
+      ? new Date(checkEndTime!.getTime() + offset) 
+      : new Date("2099-12-31T23:59:59Z"); // Մշտական (Permanent) ամրագրման համար դնում ենք հեռու ապագա
+
+    if (isNaN(newStartTime.getTime()) || (data.end_time && isNaN(newEndTime.getTime()))) {
+      throw new Error("Ամսաթվի ձևաչափը սխալ է։");
     }
 
-    // ՍՏՈՒԳՈՒՄ 2. 17:20-ի սահմանափակում
+    // 2. Ընթացիկ ժամը բերում ենք նույն ժամային գոտուն
+    const now = new Date(new Date().getTime() + offset);
+
+    // 3. ՈՒՂՂՎԱԾ ՍՏՈՒԳՈՒՄ. Արգելում ենք միայն այն դեպքում, եթե ԱՎԱՐՏԻ ժամն էլ է անցել
+    if (newEndTime.getTime() < now.getTime()) {
+      throw new Error("Ամրագրումը հնարավոր չէ, քանի որ ընտրված ժամանակահատվածն արդեն ավարտվել է։");
+    }
+
+    // 4. ՍՏՈՒԳՈՒՄ 2. 17:20-ի սահմանափակում
     if (data.end_time && checkEndTime) {
       const limit = new Date(checkStartTime);
       limit.setHours(17, 20, 0, 0); 
@@ -216,16 +229,6 @@ export async function createReservation(data: {
       if (checkEndTime > limit) {
         throw new Error("Ամրագրումը հնարավոր է միայն մինչև ժամը 17:20։");
       }
-    }
-
-    const offset = 4 * 60 * 60 * 1000; 
-    const newStartTime = new Date(checkStartTime.getTime() + offset);
-    const newEndTime = data.end_time 
-      ? new Date(checkEndTime!.getTime() + offset) 
-      : new Date("2099-12-31T23:59:59Z");
-
-    if (isNaN(newStartTime.getTime()) || (data.end_time && isNaN(newEndTime.getTime()))) {
-      throw new Error("Ամսաթվի ձևաչափը սխալ է։");
     }
 
     const result = await prisma.$transaction(async (tx: any) => {
@@ -278,7 +281,8 @@ export async function createReservation(data: {
         data: {
           asset_id: targetAssetId,
           user_id: parseInt(user.id),
-          start_time: newStartTime, 
+          // Եթե սկզբի ժամն անցել է, բայց ավարտին դեռ կա, բազայում սկիզբը դնում ենք հենց «հիմա»-ն
+          start_time: newStartTime < now ? now : newStartTime, 
           end_time: isPermanent ? null : newEndTime,
           status: isPermanent ? 'Assigned' : 'Reserved',
           pickupStatus: 'PENDING', 
@@ -297,10 +301,13 @@ export async function createReservation(data: {
 
     revalidatePath('/myreservations');
     revalidatePath('/admin/reservations');
+    
+    // Հաջողության դեպքում վերադարձնում ենք ճիշտ օբյեկտը
     return { success: true, data: result };
 
   } catch (error: any) {
-    return { success: false, error: error.message || "Ամրագրումը ձախողվեց։" };
+    // ՓՈՓՈԽՈՒԹՅՈՒՆ. return-ի փոխարեն անում ենք throw, որ Frontend-ի catch-ը ճիշտ աշխատի
+    throw new Error(error.message || "Ամրագրումը ձախողվեց։");
   }
 }
 
@@ -357,7 +364,11 @@ export async function getReservations(type: 'active' | 'permanent' | 'archive' |
       return [];
     }
 
-    await cleanupExpiredReservations();
+    // ՕՊՏԻՄԱԼԱՑՈՒՄ. Ծանր cleanup ֆունկցիան կանչում ենք ՄԻԱՅՆ ադմինի համար:
+    // Սովորական օգտատերերի էջը կբացվի ակնթարթորեն (առանց 7-8 վայրկյան սպասելու):
+    if (userRole === 'admin') {
+      await cleanupExpiredReservations();
+    }
 
     let whereClause: any = {};
 
@@ -540,28 +551,32 @@ export async function cleanupExpiredReservations() {
   }
 }
 
-export async function getPendingRequests() {
+export const getPendingRequests = cache(async () => {
   try {
-    const supabase = await createClient();
-    revalidatePath('/', 'layout');
+    const data = await prisma.reservations.findMany({
+      where: {
+        pickupStatus: { in: ['USER_READY', 'RETURN_REQUESTED'] }
+      },
+      select: {
+        id: true,
+        pickupStatus: true,
+        assets: {
+          select: {
+            name: true,
+            serial_number: true
+          }
+        },
+        users: {
+          select: {
+            full_name: true
+          }
+        }
+      }
+    });
 
-    const { data, error } = await supabase
-      .from('reservations')
-      .select(`
-        id, 
-        pickupStatus, 
-        assets (name, serial_number), 
-        users (full_name)
-      `)
-      .in('pickupStatus', ['USER_READY', 'RETURN_REQUESTED']);
-
-    if (error) {
-      console.error("Supabase Error:", error.message);
-      return [];
-    }
-    return data || [];
-  } catch (e) {
-    console.error("Supabase action wrapper error:", e);
+    return data;
+  } catch (error: any) {
+    console.error("Error fetching pending requests via Prisma Cache:", error.message);
     return [];
   }
-}
+});

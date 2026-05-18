@@ -16,7 +16,6 @@ model assets {
   status             assets_status?           @default(Available)
   current_location   assets_current_location? @default(TechSupport)
   reservations       reservations[]
-  transactionhistory transactionhistory[]
 
   @@map("assets")
 }
@@ -37,19 +36,6 @@ model reservations {
   @@map("reservations")
 }
 
-model transactionhistory {
-  id               Int       @id @default(autoincrement())
-  asset_id         Int?
-  user_id          Int?
-  action           String?
-  actual_timestamp DateTime? @default(now())
-  assets           assets?   @relation(fields: [asset_id], references: [id])
-  users            users?    @relation(fields: [user_id], references: [id])
-
-  @@index([asset_id], map: "transaction_asset_id_idx")
-  @@index([user_id], map: "transaction_user_id_idx")
-  @@map("transactionH=history")
-}
 
 model users {
   id                 Int                  @id @default(autoincrement())
@@ -59,7 +45,6 @@ model users {
   phone_number       String?              @db.VarChar(255)
   role               users_role?          @default(student)
   reservations       reservations[]
-  transactionhistory transactionhistory[]
 
   @@map("users")
 }

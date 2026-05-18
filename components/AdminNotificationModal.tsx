@@ -1,44 +1,71 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Bell, RefreshCw, CheckCircle2, XCircle, User, HardDrive } from 'lucide-react';
 import { confirmAdminHandover, confirmReturn, getPendingRequests } from '@/app/actions/reservation';
 
 export default function AdminNotificationModal() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [dismissedIds, setDismissedIds] = useState<number[]>([]);
+  
+  // useRef-ի միջոցով պահում ենք թարմ dismissedIds-ը, որպեսզի useEffect-ը անընդհատ չվերագործարկվի
+  const dismissedIdsRef = useRef<number[]>([]);
+  
+  useEffect(() => {
+    dismissedIdsRef.current = dismissedIds;
+  }, [dismissedIds]);
 
   useEffect(() => {
+    let isMounted = true; // Կանխում է state-ի թարմացումը, եթե կոմպոնենտը փակվի
+    let timerId: NodeJS.Timeout;
+
     const fetchUpdates = async () => {
       try {
         const data = await getPendingRequests();
-        if (data && Array.isArray(data)) {
-          
-          // ՈՒՂՂՎԱԾ ՖԻԼՏՐ. Դարձնում ենք մեծատառ և ստուգում երկու հնարավոր դաշտերն էլ
-          const pendingActions = data.filter((res: any) => {
-            const currentStatus = (res.pickupStatus || res.status || '').toUpperCase();
-            return currentStatus === 'USER_READY' || currentStatus === 'RETURN_REQUESTED';
-          });
-          
+        
+        // Եթե կապի խնդիր կա կամ տվյալներ չկան, կանգնեցնում ենք
+        if (!isMounted || !data || !Array.isArray(data)) return;
+
+        // Ֆիլտրում ենք՝ օգտագործելով useRef-ի ընթացիկ արժեքը
+        const pendingActions = data.filter((res: any) => {
+          const currentStatus = (res.pickupStatus || res.status || '').toUpperCase();
+          const isNotDismissed = !dismissedIdsRef.current.includes(res.id);
+
+          return (currentStatus === 'USER_READY' || currentStatus === 'RETURN_REQUESTED') && isNotDismissed;
+        });
+        
+        if (isMounted) {
           setNotifications(pendingActions);
         }
       } catch (err) {
         console.error("Error fetching updates:", err);
+      } finally {
+        // Փոխանակ setInterval անելու, հաջորդ հարցումը պլանավորում ենք ՄԻԱՅՆ նախորդի ավարտից հետո
+        if (isMounted) {
+          timerId = setTimeout(fetchUpdates, 5000);
+        }
       }
     };
 
     fetchUpdates();
-    const interval = setInterval(fetchUpdates, 5000); 
-    return () => clearInterval(interval);
-  }, []);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timerId);
+    };
+  }, []); // ԶԱՆԳՎԱԾԸ ՄՆՈՒՄ Է ԴԱՏԱՐԿ. Սա երաշխավորում է, որ ոչ մի Failed to fetch էլ չի լինի
 
   if (notifications.length === 0) return null;
 
   const currentRequest = notifications[0];
-  
-  // ՈՒՂՂՎԱԾ ՏՐԱՄԱԲԱՆՈՒԹՅՈՒՆ. ստուգում ենք անկախ տառատեսակից
   const currentStatus = (currentRequest.pickupStatus || currentRequest.status || '').toUpperCase();
   const isReturn = currentStatus === 'RETURN_REQUESTED';
+
+  const handleDismiss = () => {
+    setDismissedIds(prev => [...prev, currentRequest.id]);
+    setNotifications(prev => prev.filter(n => n.id !== currentRequest.id));
+  };
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[9999] flex items-center justify-center p-4 antialiased">
@@ -114,7 +141,7 @@ export default function AdminNotificationModal() {
           </button>
           
           <button
-            onClick={() => setNotifications(prev => prev.filter(n => n.id !== currentRequest.id))} 
+            onClick={handleDismiss}
             className="w-full py-3 text-slate-400 hover:text-slate-600 font-black uppercase text-[10px] tracking-widest transition-colors flex items-center justify-center gap-2"
           >
             <XCircle size={16} />
