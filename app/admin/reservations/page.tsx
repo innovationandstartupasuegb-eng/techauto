@@ -11,7 +11,8 @@ import {
   getAssets, 
   createPermanentAssignment,
   confirmReturn,
-  confirmAdminHandover 
+  confirmAdminHandover,
+  cleanupExpiredReservations // ՈՒՂՂՎԱԾ Է. Ավելացվել է մաքրման ֆունկցիան
 } from "@/app/actions/reservation";
 
 export default function AllReservationsPage() {
@@ -65,8 +66,22 @@ export default function AllReservationsPage() {
     }
   };
 
+  // ՈՒՂՂՎԱԾ Է. Մաքրումն ու տվյալների բեռնումը համակցված են՝ կրկնակի հարցումներից խուսափելու համար
   useEffect(() => {
-    loadInitialData(currentTab);
+    const runBackgroundCleanup = async () => {
+      try {
+        setLoading(true);
+        // Նախ ետնաբեմում կատարում ենք հին տվյալների մաքրումը
+        await cleanupExpiredReservations();
+      } catch (error) {
+        console.error("Ֆոնային մաքրման սխալ:", error);
+      } finally {
+        // Վերջում ՄԵԿ ԱՆԳԱՄ բեռնում ենք աղյուսակի վերջնական թարմ տվյալները
+        await loadInitialData(currentTab);
+      }
+    };
+
+    runBackgroundCleanup();
   }, [currentTab]);
 
   const formatDateTime = (dateVal: any) => {
@@ -112,7 +127,6 @@ export default function AllReservationsPage() {
     }
   };
 
-  // ՈՒՂՂՎԱԾ ԵՎ ԱՊԱՀՈՎԱՑՎԱԾ ՖՈՒՆԿՑԻԱ
   const handleConfirmReturn = async (id: number) => {
     if (!window.confirm("Հաստատո՞ւմ եք սարքի վերադարձը դեպի պահեստ:")) return;
     

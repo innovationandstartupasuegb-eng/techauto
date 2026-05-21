@@ -354,72 +354,69 @@ export async function deleteReservation(id: number) {
 
 export async function getReservations(type: 'active' | 'permanent' | 'archive' | 'all' = 'active') {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) return [];
+    const session = await getServerSession(authOptions); //
+    if (!session?.user) return []; //
 
-    const userRole = (session.user as any).role;
-    const userId = parseInt((session.user as any).id);
+    const userRole = (session.user as any).role; //
+    const userId = parseInt((session.user as any).id); //
 
-    if (isNaN(userId)) {
-      return [];
-    }
+    if (isNaN(userId)) { //
+      return []; //
+    } //
 
-    // ՕՊՏԻՄԱԼԱՑՈՒՄ. Ծանր cleanup ֆունկցիան կանչում ենք ՄԻԱՅՆ ադմինի համար:
-    // Սովորական օգտատերերի էջը կբացվի ակնթարթորեն (առանց 7-8 վայրկյան սպասելու):
-    if (userRole === 'admin') {
-      await cleanupExpiredReservations();
-    }
+    // ՈՒՂՂՎԱԾ Է. Ծանր cleanup ֆունկցիայի սինխրոն կանչը հեռացված է այստեղից:
+    // Այժմ թե՛ ադմինի, թե՛ օգտատերերի էջերը կբացվեն ակնթարթորեն (առանց 7-8 վայրկյան սպասելու):
 
-    let whereClause: any = {};
+    let whereClause: any = {}; //
 
-    if (userRole !== 'admin') {
-      whereClause.user_id = userId;
-    }
+    if (userRole !== 'admin') { //
+      whereClause.user_id = userId; //
+    } //
 
-    switch (type) {
-      case 'active':
-        whereClause.status = 'Reserved';
-        whereClause.pickupStatus = { notIn: ['RETURNED', 'CANCELLED'] };
-        break;
-      case 'permanent':
-        whereClause.status = 'Assigned';
-        whereClause.pickupStatus = { not: 'RETURNED' };
-        break;
-      case 'archive':
-        whereClause.pickupStatus = { in: ['RETURNED', 'CANCELLED'] };
-        break;
-      case 'all':
-        whereClause.pickupStatus = { notIn: ['RETURNED', 'CANCELLED'] };
-        break;
-    }
+    switch (type) { //
+      case 'active': //
+        whereClause.status = 'Reserved'; //
+        whereClause.pickupStatus = { notIn: ['RETURNED', 'CANCELLED'] }; //
+        break; //
+      case 'permanent': //
+        whereClause.status = 'Assigned'; //
+        whereClause.pickupStatus = { not: 'RETURNED' }; //
+        break; //
+      case 'archive': //
+        whereClause.pickupStatus = { in: ['RETURNED', 'CANCELLED'] }; //
+        break; //
+      case 'all': //
+        whereClause.pickupStatus = { notIn: ['RETURNED', 'CANCELLED'] }; //
+        break; //
+    } //
 
-    const data = await prisma.reservations.findMany({
-      where: whereClause,
-      include: { 
-        assets: true, 
-        users: { select: { id: true, full_name: true, phone_number: true } }   
-      },
-      orderBy: { start_time: 'desc' },
-    });
+    const data = await prisma.reservations.findMany({ //
+      where: whereClause, //
+      include: { //
+        assets: true, //
+        users: { select: { id: true, full_name: true, phone_number: true } }   //
+      }, //
+      orderBy: { start_time: 'desc' }, //
+    }); //
 
-    return data;
-  } catch (error) {
-    console.error("getReservations error:", error);
-    return [];
-  }
+    return data; //
+  } catch (error) { //
+    console.error("getReservations error:", error); //
+    return []; //
+  } //
 }
 
 export async function getUniqueAssetNames() {
   try {
-    const assets = await prisma.assets.findMany({
-      distinct: ['name'],
-      select: { name: true },
-      orderBy: { name: 'asc' }
-    });
-    return assets.map((a: any) => a.name);
-  } catch (error) {
-    return [];
-  }
+    const assets = await prisma.assets.findMany({ //
+      distinct: ['name'], //
+      select: { name: true }, //
+      orderBy: { name: 'asc' } //
+    }); //
+    return assets.map((a: any) => a.name); //
+  } catch (error) { //
+    return []; //
+  } //
 }
 
 export async function requestReturn(reservationId: number) {
