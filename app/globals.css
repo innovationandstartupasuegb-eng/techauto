@@ -15,12 +15,61 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
-    --foreground: #ededed;
+    --foreground: #724848;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* ========================================================
+   📱 GLOBAL RESPONSIVE FIXES (Հեռախոսների համար)
+   ======================================================== */
+
+@media (max-width: 768px) {
+  /* 1. Արգելում ենք, որ որևէ տարր դուրս թռնի էկրանից */
+  *, ::before, ::after {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* 2. Բոլոր մեծ կլորացված անկյունները հեռախոսի վրա դարձնում ենք մեղմ (1.5rem = 24px) */
+  .rounded-\[2\.5rem\], 
+  .rounded-\[2rem\], 
+  .rounded-3xl {
+    border-radius: 1.25rem !important;
+  }
+
+  /* 3. Փոքրացնում ենք չափից շատ մեծ padding-ները (8, 10, 12), որ տեքստերը տեղավորվեն */
+  .p-8, .p-10, .p-12, .p-16 {
+    padding: 1.25rem !important;
+  }
+  
+  .px-8, .px-10, .px-12 {
+    padding-left: 1.25rem !important;
+    padding-right: 1.25rem !important;
+  }
+
+  /* 4. ԱԴՄԻՆԻ ԱՂՅՈՒՍԱԿՆԵՐԻ ՓՐԿՈՒԹՅՈՒՆԸ.
+     Եթե ադմինի էջերում աղյուսակ կա, այն հեռախոսի վրա չի կոտրվի, այլ սիրուն կսահի (scroll) */
+  table {
+    display: block !important;
+    overflow-x: auto !important;
+    width: 100% !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Աղյուսակի ներսի տեքստերը չեն թռնի հաջորդ տող, այլ կմնան մեկ տողով */
+  th, td {
+    white-space: nowrap !important;
+  }
+
+  /* 5. Խոշոր վերնագրերը (text-2xl, 3xl, 4xl) հեռախոսի վրա մի փոքր փոքրացնում ենք */
+  h1, .text-xl, .text-2xl, .text-3xl, .text-4xl {
+    font-size: 1.25rem !important; /* ~20px */
+    letter-spacing: normal !important;
+  }
 }
