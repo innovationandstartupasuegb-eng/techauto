@@ -199,34 +199,30 @@ export async function createReservation(data: {
 
     const user = session.user as any;
     
-    const checkStartTime = new Date(data.start_time);
-    const checkEndTime = data.end_time ? new Date(data.end_time) : null;
-
-    // 1. Հաշվարկում ենք ճիշտ ժամային գոտու offset-ը (+4 ժամ)
-    const offset = 4 * 60 * 60 * 1000; 
-    const newStartTime = new Date(checkStartTime.getTime() + offset);
+    // ՈՒՂՂՈՒՄ. Ստեղծում ենք ճիշտ ISO Ժամանակներ՝ առանց ձեռքով +4 ժամ անելու
+    const newStartTime = new Date(data.start_time);
     const newEndTime = data.end_time 
-      ? new Date(checkEndTime!.getTime() + offset) 
-      : new Date("2099-12-31T23:59:59Z"); // Մշտական (Permanent) ամրագրման համար դնում ենք հեռու ապագա
+      ? new Date(data.end_time) 
+      : new Date("2099-12-31T23:59:59Z");
 
     if (isNaN(newStartTime.getTime()) || (data.end_time && isNaN(newEndTime.getTime()))) {
       throw new Error("Ամսաթվի ձևաչափը սխալ է։");
     }
 
-    // 2. Ընթացիկ ժամը բերում ենք նույն ժամային գոտուն
-    const now = new Date(new Date().getTime() + offset);
+    // Ընթացիկ ստանդարտ ժամը
+    const now = new Date();
 
-    // 3. ՈՒՂՂՎԱԾ ՍՏՈՒԳՈՒՄ. Արգելում ենք միայն այն դեպքում, եթե ԱՎԱՐՏԻ ժամն էլ է անցել
+    // 1. ՍՏՈՒԳՈՒՄ. Արգելում ենք միայն այն դեպքում, եթե ԱՎԱՐՏԻ ժամն էլ է անցել
     if (newEndTime.getTime() < now.getTime()) {
       throw new Error("Ամրագրումը հնարավոր չէ, քանի որ ընտրված ժամանակահատվածն արդեն ավարտվել է։");
     }
 
-    // 4. ՍՏՈՒԳՈՒՄ 2. 17:20-ի սահմանափակում
-    if (data.end_time && checkEndTime) {
-      const limit = new Date(checkStartTime);
+    // 2. ՍՏՈՒԳՈՒՄ 2. 17:20-ի սահմանափակում
+    if (data.end_time) {
+      const limit = new Date(newStartTime);
       limit.setHours(17, 20, 0, 0); 
       
-      if (checkEndTime > limit) {
+      if (newEndTime > limit) {
         throw new Error("Ամրագրումը հնարավոր է միայն մինչև ժամը 17:20։");
       }
     }
@@ -281,7 +277,7 @@ export async function createReservation(data: {
         data: {
           asset_id: targetAssetId,
           user_id: parseInt(user.id),
-          // Եթե սկզբի ժամն անցել է, բայց ավարտին դեռ կա, բազայում սկիզբը դնում ենք հենց «հիմա»-ն
+          // Եթե սկզբի ժամն անցել է, բայց ավարտին դեռ կա, դնում ենք հիմիկվա ճիշտ ժամը
           start_time: newStartTime < now ? now : newStartTime, 
           end_time: isPermanent ? null : newEndTime,
           status: isPermanent ? 'Assigned' : 'Reserved',
@@ -302,11 +298,9 @@ export async function createReservation(data: {
     revalidatePath('/myreservations');
     revalidatePath('/admin/reservations');
     
-    // Հաջողության դեպքում վերադարձնում ենք ճիշտ օբյեկտը
     return { success: true, data: result };
 
   } catch (error: any) {
-    // ՓՈՓՈԽՈՒԹՅՈՒՆ. return-ի փոխարեն անում ենք throw, որ Frontend-ի catch-ը ճիշտ աշխատի
     throw new Error(error.message || "Ամրագրումը ձախողվեց։");
   }
 }
