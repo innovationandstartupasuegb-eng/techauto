@@ -12,7 +12,6 @@ import {
   ChevronLeft, 
   CheckCircle2,
   Info,
-  Settings2
 } from 'lucide-react';
 
 interface ReservePageProps {
@@ -109,7 +108,6 @@ export default function ReservePage({
 
       setMessage("✅ Ամրագրումը հաջողությամբ կատարվեց");
       setTimeout(() => {
-        // 🚀 Հանճարեղ լուծում. Ուղղակի հետ ենք ուղարկում այն էջ, որտեղից եկել են
         router.back();
       }, 2000);
 
@@ -121,21 +119,21 @@ export default function ReservePage({
   };
 
   return (
-    <div className="bg-slate-200 min-h-screen font-sans text-slate-900 pb-12">
+    <div className="bg-slate-200 min-h-screen font-sans text-slate-900 pb-12 w-full overflow-x-hidden">
       
-      {/* Ճշգրիտ պատճենված Navbar ManageClient-ից */}
-      <div className="bg-white/80 backdrop-blur-md border-b border-slate-300 px-6 py-6 sticky top-0 z-20 shadow-sm">
-        <div className="max-w-[1400px] mx-auto flex items-center justify-between">
+      {/* 📱 ՌԵՍՊՈՆՍԻՎ NAVBAR: Հեռախոսի վրա տարրերը դասավորվում են ուղղահայաց */}
+      <div className="bg-white/80 backdrop-blur-md border-b border-slate-300 px-4 py-4 md:px-6 md:py-6 sticky top-0 z-20 shadow-sm w-full">
+        <div className="max-w-[1400px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <button 
             onClick={() => router.back()}
-            className="flex items-center text-slate-500 hover:text-indigo-600 transition-all font-black uppercase text-[10px] tracking-widest group"
+            className="flex items-center text-slate-500 hover:text-indigo-600 transition-all font-black uppercase text-[10px] tracking-widest group self-start"
           >
             <ChevronLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
             <span className="ml-1">Հետ դեպի գլխավոր</span>
           </button>
 
-          <div className="text-right">
-            <h1 className="text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2 justify-end">
+          <div className="text-left sm:text-right">
+            <h1 className="text-lg md:text-xl font-black text-slate-900 uppercase tracking-tighter flex items-center gap-2 sm:justify-end">
               <Calendar size={20} className="text-indigo-600" />
               Նոր Ամրագրում
             </h1>
@@ -146,51 +144,54 @@ export default function ReservePage({
         </div>
       </div>
 
-      {/* Մեջտեղի հատված - Ձեռք չի տրվել (բացի վերևի padding-ից) */}
-      <div className="max-w-3xl mx-auto px-6 pt-10">
+      {/* 📱 ՄԵՋՏԵՂԻ ՀԱՏՎԱԾ - Մեղմացված padding-ներ հեռախոսի համար */}
+      <div className="max-w-3xl mx-auto px-4 md:px-6 pt-6 md:pt-10 w-full box-border">
         {message && (
-          <div className={`mb-8 p-5 rounded-[1.5rem] flex items-center gap-4 border shadow-xl animate-in fade-in slide-in-from-top-4 ${
+          <div className={`mb-6 md:mb-8 p-4 md:p-5 rounded-2xl md:rounded-[1.5rem] flex items-center gap-3 md:gap-4 border shadow-xl animate-in fade-in slide-in-from-top-4 ${
             message.includes('✅') 
               ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
               : 'bg-red-50 text-red-700 border-red-200'
           }`}>
-            {message.includes('✅') ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
-            <p className="font-black uppercase text-[11px] tracking-wider">{message}</p>
+            {message.includes('✅') ? <CheckCircle2 size={22} /> : <AlertCircle size={22} />}
+            <p className="font-black uppercase text-[10px] md:text-[11px] tracking-wider break-words flex-1">{message}</p>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <form onSubmit={handleSubmit} className="space-y-6 md:space-y-8 w-full">
           
           {/* Սեկցիա 1. Սարքի ընտրություն */}
-          <div className="bg-slate-50 rounded-[2.5rem] shadow-2xl border border-slate-300 p-8 space-y-6">
-            <div className="flex items-center gap-3 text-indigo-600 border-b border-slate-200 pb-4">
-              <Monitor size={20} strokeWidth={3} />
-              <h2 className="font-black text-xs uppercase tracking-[0.2em] text-slate-800">Ընտրեք սարքավորումը</h2>
+          <div className="bg-slate-50 rounded-2xl md:rounded-[2.5rem] shadow-2xl border border-slate-300 p-5 md:p-8 space-y-6 w-full box-border">
+            <div className="flex items-center gap-3 text-indigo-600 border-b border-slate-200 pb-3 md:pb-4">
+              <Monitor size={18} strokeWidth={3} />
+              <h2 className="font-black text-[11px] md:text-xs uppercase tracking-[0.15em] md:tracking-[0.2em] text-slate-800">Ընտրեք սարքավորումը</h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 w-full">
+              <div className="space-y-2 min-w-0">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Տեսակը</label>
-                <select 
-                  required
-                  className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all cursor-pointer shadow-sm appearance-none hover:border-indigo-300"
-                  onChange={(e) => setFormData({...formData, assetName: e.target.value, assetId: "any"})}
-                  value={formData.assetName}
-                >
-                  <option value="">Ընտրեք տեսակը...</option>
-                  {assets.map((asset) => (
-                    <option key={asset.id} value={asset.name}>{asset.name}</option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <select 
+                    required
+                    className="w-full min-w-0 p-3.5 md:p-4 bg-white border border-slate-200 rounded-xl md:rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all cursor-pointer shadow-sm hover:border-indigo-300"
+                    onChange={(e) => setFormData({...formData, assetName: e.target.value, assetId: "any"})}
+                    value={formData.assetName}
+                  >
+                    <option value="">Ընտրեք տեսակը...</option>
+                    {assets.map((asset) => (
+                      <option key={asset.id} value={asset.name}>{asset.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {formData.assetName && (
-                <div className="space-y-2 animate-in fade-in zoom-in-95">
+                <div className="space-y-2 min-w-0 animate-in fade-in zoom-in-95">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Կոնկրետ սարք (S/N)</label>
                   <div className="relative">
-                    <Hash className="absolute left-4 top-4.5 text-slate-300" size={16} />
+                    {/* 📱 ՈՒՂՂՈՒՄ: top-4.5-ը փոխվեց top-4-ի */}
+                    <Hash className="absolute left-4 top-4 text-slate-300" size={16} />
                     <select 
-                      className="w-full p-4 pl-12 bg-white border border-slate-200 rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all cursor-pointer shadow-sm appearance-none"
+                      className="w-full min-w-0 p-3.5 md:p-4 pl-12 pr-4 bg-white border border-slate-200 rounded-xl md:rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all cursor-pointer shadow-sm"
                       onChange={(e) => setFormData({...formData, assetId: e.target.value})}
                       value={formData.assetId}
                     >
@@ -206,31 +207,32 @@ export default function ReservePage({
           </div>
 
           {/* Սեկցիա 2. Ժամանակացույց */}
-          <div className="bg-slate-50 rounded-[2.5rem] shadow-2xl border border-slate-300 p-8 space-y-6">
-            <div className="flex items-center gap-3 text-indigo-600 border-b border-slate-200 pb-4">
-              <Calendar size={20} strokeWidth={3} />
-              <h2 className="font-black text-xs uppercase tracking-[0.2em] text-slate-800">Ամսաթիվ և Ժամանակ</h2>
+          <div className="bg-slate-50 rounded-2xl md:rounded-[2.5rem] shadow-2xl border border-slate-300 p-5 md:p-8 space-y-6 w-full box-border">
+            <div className="flex items-center gap-3 text-indigo-600 border-b border-slate-200 pb-3 md:pb-4">
+              <Calendar size={18} strokeWidth={3} />
+              <h2 className="font-black text-[11px] md:text-xs uppercase tracking-[0.15em] md:tracking-[0.2em] text-slate-800">Ամսաթիվ և Ժամանակ</h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="space-y-2">
+            {/* 📱 ՈՒՂՂՈՒՄ: Հեռախոսի վրա 1 սյունակ (grid-cols-1), համակարգչով՝ 3 (sm:grid-cols-3) */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 w-full">
+              <div className="space-y-2 min-w-0">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ամսաթիվ</label>
                 <input 
                   required
                   type="date"
                   min={new Date().toISOString().split('T')[0]}
-                  className="w-full p-4 bg-white border border-slate-200 rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm"
+                  className="w-full min-w-0 p-3.5 md:p-4 bg-white border border-slate-200 rounded-xl md:rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm"
                   value={formData.date}
                   onChange={(e) => setFormData({...formData, date: e.target.value})}
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 min-w-0">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Սկիզբ</label>
                 <div className="relative">
                   <Clock className="absolute left-4 top-4 text-slate-300" size={16} />
                   <select 
-                    className="w-full p-4 pl-12 bg-white border border-slate-200 rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm appearance-none" 
+                    className="w-full min-w-0 p-3.5 md:p-4 pl-12 pr-4 bg-white border border-slate-200 rounded-xl md:rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm" 
                     onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
                     value={formData.startTime}
                   >
@@ -239,13 +241,13 @@ export default function ReservePage({
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-2 min-w-0">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ավարտ</label>
                 <div className="relative">
                   <Clock className="absolute left-4 top-4 text-slate-300" size={16} />
                   <select 
                     required
-                    className="w-full p-4 pl-12 bg-white border border-slate-200 rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm appearance-none font-black text-indigo-600"
+                    className="w-full min-w-0 p-3.5 md:p-4 pl-12 pr-4 bg-white border border-slate-200 rounded-xl md:rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm font-black text-indigo-600"
                     onChange={(e) => setFormData({...formData, endTime: e.target.value})}
                     value={formData.endTime}
                   >
@@ -257,14 +259,14 @@ export default function ReservePage({
             </div>
 
             {reservedSlots.length > 0 && (
-              <div className="mt-6 p-5 bg-orange-100/50 rounded-[1.5rem] border border-orange-200">
-                <div className="flex items-center gap-2 text-orange-800 mb-4 font-black uppercase text-[9px] tracking-widest">
+              <div className="mt-4 p-4 bg-orange-100/50 rounded-xl md:rounded-[1.5rem] border border-orange-200">
+                <div className="flex items-center gap-2 text-orange-800 mb-3 font-black uppercase text-[9px] tracking-widest">
                   <Info size={14} />
                   Այս սարքի զբաղված ժամերը
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {reservedSlots.map((slot, i) => (
-                    <span key={i} className="px-4 py-2 bg-white text-orange-700 border border-orange-100 rounded-xl text-[10px] font-black shadow-sm tracking-tighter">
+                    <span key={i} className="px-3 py-1.5 bg-white text-orange-700 border border-orange-100 rounded-lg text-[9px] font-black shadow-sm tracking-tighter">
                       {formatTime(slot.start_time)} — {formatTime(slot.end_time)}
                     </span>
                   ))}
@@ -273,11 +275,12 @@ export default function ReservePage({
             )}
           </div>
 
-          <div className="max-w-md mx-auto">
+          {/* Հաստատելու կոճակ */}
+          <div className="max-w-md mx-auto px-2">
             <button 
               disabled={loading || !formData.assetName}
               type="submit" 
-              className={`w-full py-6 rounded-[2rem] font-black uppercase text-xs tracking-[0.3em] text-white shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 ${
+              className={`w-full py-4 md:py-6 rounded-xl md:rounded-[2rem] font-black uppercase text-[11px] md:text-xs tracking-[0.2em] md:tracking-[0.3em] text-white shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 ${
                 loading || !formData.assetName
                   ? 'bg-slate-400 cursor-not-allowed shadow-none' 
                   : 'bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-200'
@@ -287,7 +290,7 @@ export default function ReservePage({
                 <div className="w-5 h-5 border-4 border-white/30 border-t-white rounded-full animate-spin"></div>
               ) : (
                 <>
-                  <CheckCircle2 size={20} strokeWidth={3} />
+                  <CheckCircle2 size={18} strokeWidth={3} />
                   Հաստատել ամրագրումը
                 </>
               )}
