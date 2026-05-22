@@ -109,11 +109,8 @@ export default function ReservePage({
 
       setMessage("✅ Ամրագրումը հաջողությամբ կատարվեց");
       setTimeout(() => {
-        if (isActualAdmin) {
-          router.push('/admin/reservations');
-        } else {
-          router.push('/myreservations');
-        }
+        // 🚀 Հանճարեղ լուծում. Ուղղակի հետ ենք ուղարկում այն էջ, որտեղից եկել են
+        router.back();
       }, 2000);
 
     } catch (err: any) {
