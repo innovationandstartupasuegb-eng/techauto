@@ -121,7 +121,7 @@ export default function ReservePage({
   return (
     <div className="bg-slate-200 min-h-screen font-sans text-slate-900 pb-12 w-full overflow-x-hidden">
       
-      {/* 📱 ՌԵՍՊՈՆՍԻՎ NAVBAR: Հեռախոսի վրա տարրերը դասավորվում են ուղղահայաց */}
+      {/* 📱 ՌԵՍՊՈՆՍԻՎ NAVBAR */}
       <div className="bg-white/80 backdrop-blur-md border-b border-slate-300 px-4 py-4 md:px-6 md:py-6 sticky top-0 z-20 shadow-sm w-full">
         <div className="max-w-[1400px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <button 
@@ -144,35 +144,36 @@ export default function ReservePage({
         </div>
       </div>
 
-      {/* 📱 ՄԵՋՏԵՂԻ ՀԱՏՎԱԾ - Մեղմացված padding-ներ հեռախոսի համար */}
-      <div className="max-w-3xl mx-auto px-4 md:px-6 pt-6 md:pt-10 w-full box-border">
+      {/* 📱 ՄԵՋՏԵՂԻ ՀԱՏՎԱԾ - Լիարժեք էկրանի կառավարում */}
+      <div className="max-w-3xl mx-auto px-4 md:px-6 pt-6 md:pt-10 w-full box-border overflow-hidden">
         {message && (
           <div className={`mb-6 md:mb-8 p-4 md:p-5 rounded-2xl md:rounded-[1.5rem] flex items-center gap-3 md:gap-4 border shadow-xl animate-in fade-in slide-in-from-top-4 ${
             message.includes('✅') 
               ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
               : 'bg-red-50 text-red-700 border-red-200'
           }`}>
-            {message.includes('✅') ? <CheckCircle2 size={22} /> : <AlertCircle size={22} />}
+            {message.includes('✅') ? <CheckCircle2 className="shrink-0" size={22} /> : <AlertCircle className="shrink-0" size={22} />}
             <p className="font-black uppercase text-[10px] md:text-[11px] tracking-wider break-words flex-1">{message}</p>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6 md:space-y-8 w-full">
+        <form onSubmit={handleSubmit} className="space-y-6 md:space-y-8 w-full box-border">
           
           {/* Սեկցիա 1. Սարքի ընտրություն */}
-          <div className="bg-slate-50 rounded-2xl md:rounded-[2.5rem] shadow-2xl border border-slate-300 p-5 md:p-8 space-y-6 w-full box-border">
+          <div className="bg-slate-50 rounded-2xl md:rounded-[2.5rem] shadow-2xl border border-slate-300 p-4 md:p-8 space-y-6 w-full box-border">
             <div className="flex items-center gap-3 text-indigo-600 border-b border-slate-200 pb-3 md:pb-4">
               <Monitor size={18} strokeWidth={3} />
               <h2 className="font-black text-[11px] md:text-xs uppercase tracking-[0.15em] md:tracking-[0.2em] text-slate-800">Ընտրեք սարքավորումը</h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 w-full">
-              <div className="space-y-2 min-w-0">
+            {/* 📱 ՈՒՂՂՈՒՄ: grid-ը դարձվել է լիարժեք ռեսպոնսիվ `grid-cols-1`, որ հեռախոսով չպատռի */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 w-full box-border">
+              <div className="space-y-2 w-full min-w-0">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Տեսակը</label>
-                <div className="relative">
+                <div className="w-full">
                   <select 
                     required
-                    className="w-full min-w-0 p-3.5 md:p-4 bg-white border border-slate-200 rounded-xl md:rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all cursor-pointer shadow-sm hover:border-indigo-300"
+                    className="w-full bg-white border border-slate-200 rounded-xl md:rounded-2xl p-3.5 md:p-4 font-bold text-xs md:text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all cursor-pointer shadow-sm hover:border-indigo-300 text-ellipsis overflow-hidden"
                     onChange={(e) => setFormData({...formData, assetName: e.target.value, assetId: "any"})}
                     value={formData.assetName}
                   >
@@ -185,13 +186,15 @@ export default function ReservePage({
               </div>
 
               {formData.assetName && (
-                <div className="space-y-2 min-w-0 animate-in fade-in zoom-in-95">
+                <div className="space-y-2 w-full min-w-0 animate-in fade-in zoom-in-95">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Կոնկրետ սարք (S/N)</label>
-                  <div className="relative">
-                    {/* 📱 ՈՒՂՂՈՒՄ: top-4.5-ը փոխվեց top-4-ի */}
-                    <Hash className="absolute left-4 top-4 text-slate-300" size={16} />
+                  <div className="relative w-full flex items-center">
+                    {/* 📱 ՈՒՂՂՈՒՄ: Icon-ի դիրքը ֆիքսվեց `inset-y-0`-ով, որ միշտ լինի ճիշտ կենտրոնում */}
+                    <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                      <Hash className="text-slate-400" size={14} />
+                    </div>
                     <select 
-                      className="w-full min-w-0 p-3.5 md:p-4 pl-12 pr-4 bg-white border border-slate-200 rounded-xl md:rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all cursor-pointer shadow-sm"
+                      className="w-full bg-white border border-slate-200 rounded-xl md:rounded-2xl p-3.5 md:p-4 pl-10 pr-8 font-bold text-xs md:text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all cursor-pointer shadow-sm text-ellipsis overflow-hidden"
                       onChange={(e) => setFormData({...formData, assetId: e.target.value})}
                       value={formData.assetId}
                     >
@@ -207,32 +210,33 @@ export default function ReservePage({
           </div>
 
           {/* Սեկցիա 2. Ժամանակացույց */}
-          <div className="bg-slate-50 rounded-2xl md:rounded-[2.5rem] shadow-2xl border border-slate-300 p-5 md:p-8 space-y-6 w-full box-border">
+          <div className="bg-slate-50 rounded-2xl md:rounded-[2.5rem] shadow-2xl border border-slate-300 p-4 md:p-8 space-y-6 w-full box-border">
             <div className="flex items-center gap-3 text-indigo-600 border-b border-slate-200 pb-3 md:pb-4">
               <Calendar size={18} strokeWidth={3} />
               <h2 className="font-black text-[11px] md:text-xs uppercase tracking-[0.15em] md:tracking-[0.2em] text-slate-800">Ամսաթիվ և Ժամանակ</h2>
             </div>
 
-            {/* 📱 ՈՒՂՂՈՒՄ: Հեռախոսի վրա 1 սյունակ (grid-cols-1), համակարգչով՝ 3 (sm:grid-cols-3) */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 w-full">
-              <div className="space-y-2 min-w-0">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 w-full box-border">
+              <div className="space-y-2 w-full min-w-0">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ամսաթիվ</label>
                 <input 
                   required
                   type="date"
                   min={new Date().toISOString().split('T')[0]}
-                  className="w-full min-w-0 p-3.5 md:p-4 bg-white border border-slate-200 rounded-xl md:rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm"
+                  className="w-full p-3.5 md:p-4 bg-white border border-slate-200 rounded-xl md:rounded-2xl font-bold text-xs md:text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm"
                   value={formData.date}
                   onChange={(e) => setFormData({...formData, date: e.target.value})}
                 />
               </div>
 
-              <div className="space-y-2 min-w-0">
+              <div className="space-y-2 w-full min-w-0">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Սկիզբ</label>
-                <div className="relative">
-                  <Clock className="absolute left-4 top-4 text-slate-300" size={16} />
+                <div className="relative w-full flex items-center">
+                  <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                    <Clock className="text-slate-400" size={14} />
+                  </div>
                   <select 
-                    className="w-full min-w-0 p-3.5 md:p-4 pl-12 pr-4 bg-white border border-slate-200 rounded-xl md:rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm" 
+                    className="w-full bg-white border border-slate-200 rounded-xl md:rounded-2xl p-3.5 md:p-4 pl-10 pr-8 font-bold text-xs md:text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm" 
                     onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
                     value={formData.startTime}
                   >
@@ -241,13 +245,15 @@ export default function ReservePage({
                 </div>
               </div>
 
-              <div className="space-y-2 min-w-0">
+              <div className="space-y-2 w-full min-w-0">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Ավարտ</label>
-                <div className="relative">
-                  <Clock className="absolute left-4 top-4 text-slate-300" size={16} />
+                <div className="relative w-full flex items-center">
+                  <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                    <Clock className="text-slate-400" size={14} />
+                  </div>
                   <select 
                     required
-                    className="w-full min-w-0 p-3.5 md:p-4 pl-12 pr-4 bg-white border border-slate-200 rounded-xl md:rounded-2xl font-bold text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm font-black text-indigo-600"
+                    className="w-full bg-white border border-slate-200 rounded-xl md:rounded-2xl p-3.5 md:p-4 pl-10 pr-8 font-bold text-xs md:text-sm focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm font-black text-indigo-600"
                     onChange={(e) => setFormData({...formData, endTime: e.target.value})}
                     value={formData.endTime}
                   >
@@ -259,14 +265,14 @@ export default function ReservePage({
             </div>
 
             {reservedSlots.length > 0 && (
-              <div className="mt-4 p-4 bg-orange-100/50 rounded-xl md:rounded-[1.5rem] border border-orange-200">
+              <div className="mt-4 p-4 bg-orange-100/50 rounded-xl md:rounded-[1.5rem] border border-orange-200 w-full box-border">
                 <div className="flex items-center gap-2 text-orange-800 mb-3 font-black uppercase text-[9px] tracking-widest">
                   <Info size={14} />
                   Այս սարքի զբաղված ժամերը
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1.5 w-full">
                   {reservedSlots.map((slot, i) => (
-                    <span key={i} className="px-3 py-1.5 bg-white text-orange-700 border border-orange-100 rounded-lg text-[9px] font-black shadow-sm tracking-tighter">
+                    <span key={i} className="px-2.5 py-1.5 bg-white text-orange-700 border border-orange-100 rounded-lg text-[9px] font-black shadow-sm tracking-tighter whitespace-nowrap">
                       {formatTime(slot.start_time)} — {formatTime(slot.end_time)}
                     </span>
                   ))}
@@ -276,11 +282,11 @@ export default function ReservePage({
           </div>
 
           {/* Հաստատելու կոճակ */}
-          <div className="max-w-md mx-auto px-2">
+          <div className="max-w-md mx-auto px-2 w-full box-border">
             <button 
               disabled={loading || !formData.assetName}
               type="submit" 
-              className={`w-full py-4 md:py-6 rounded-xl md:rounded-[2rem] font-black uppercase text-[11px] md:text-xs tracking-[0.2em] md:tracking-[0.3em] text-white shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 ${
+              className={`w-full py-4 md:py-5 rounded-xl md:rounded-[2rem] font-black uppercase text-[10px] md:text-xs tracking-[0.15em] md:tracking-[0.3em] text-white shadow-2xl transition-all flex items-center justify-center gap-3 active:scale-95 ${
                 loading || !formData.assetName
                   ? 'bg-slate-400 cursor-not-allowed shadow-none' 
                   : 'bg-indigo-600 hover:bg-indigo-700 hover:shadow-indigo-200'

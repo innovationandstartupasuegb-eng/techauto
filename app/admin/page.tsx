@@ -56,7 +56,7 @@ export default function AdminDashboard() {
           <div className="flex items-center justify-center gap-4">
             <div className="h-[2px] w-12 bg-indigo-600" />
             <span className="text-[11px] font-bold text-slate-500 uppercase tracking-[0.4em]">
-              Գույքի վերահսկման համակարգ
+              Տեխնիկայի վերահսկման համակարգ
             </span>
             <div className="h-[2px] w-12 bg-indigo-600" />
           </div>
