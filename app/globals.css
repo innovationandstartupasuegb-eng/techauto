@@ -30,20 +30,26 @@ body {
    ======================================================== */
 
 @media (max-width: 768px) {
-  /* 1. Արգելում ենք, որ որևէ տարր դուրս թռնի էկրանից */
+  /* 1. ՈՒՂՂՈՒՄ. Թույլ չենք տալիս էջից դուրս թռնել և ՉԵԶՈՔԱՑՆՈՒՄ ԵՆՔ սև ռամկաները */
   *, ::before, ::after {
     max-width: 100% !important;
     box-sizing: border-box !important;
   }
 
-  /* 2. Բոլոր մեծ կլորացված անկյունները հեռախոսի վրա դարձնում ենք մեղմ (1.5rem = 24px) */
+  /* Սա կոնկրետ կհեռացնի բրաուզերի կողմից ավելացված սխալ սև/մուգ շրջանակները հեռախոսի վրա */
+  button, input, select, textarea {
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  /* 2. Բոլոր մեծ կլորացված անկյունները հեռախոսի վրա դարձնում ենք մեղմ */
   .rounded-\[2\.5rem\], 
   .rounded-\[2rem\], 
   .rounded-3xl {
     border-radius: 1.25rem !important;
   }
 
-  /* 3. Փոքրացնում ենք չափից շատ մեծ padding-ները (8, 10, 12), որ տեքստերը տեղավորվեն */
+  /* 3. Փոքրացնում ենք չափից շատ մեծ padding-ները (8, 10, 12) */
   .p-8, .p-10, .p-12, .p-16 {
     padding: 1.25rem !important;
   }
@@ -53,8 +59,7 @@ body {
     padding-right: 1.25rem !important;
   }
 
-  /* 4. ԱԴՄԻՆԻ ԱՂՅՈՒՍԱԿՆԵՐԻ ՓՐԿՈՒԹՅՈՒՆԸ.
-     Եթե ադմինի էջերում աղյուսակ կա, այն հեռախոսի վրա չի կոտրվի, այլ սիրուն կսահի (scroll) */
+  /* 4. Ադմինի աղյուսակների հարմարեցում */
   table {
     display: block !important;
     overflow-x: auto !important;
@@ -62,12 +67,11 @@ body {
     -webkit-overflow-scrolling: touch;
   }
   
-  /* Աղյուսակի ներսի տեքստերը չեն թռնի հաջորդ տող, այլ կմնան մեկ տողով */
   th, td {
     white-space: nowrap !important;
   }
 
-  /* 5. Խոշոր վերնագրերը (text-2xl, 3xl, 4xl) հեռախոսի վրա մի փոքր փոքրացնում ենք */
+  /* 5. Խոշոր վերնագրերի փոքրացում */
   h1, .text-xl, .text-2xl, .text-3xl, .text-4xl {
     font-size: 1.25rem !important; /* ~20px */
     letter-spacing: normal !important;
