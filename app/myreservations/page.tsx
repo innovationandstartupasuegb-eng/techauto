@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { getReservations, deleteReservation } from "@/app/actions/reservation";
 import PickupButton from "@/app/myreservations/PickupButton";
 import { ChevronLeft, Calendar, LayoutDashboard } from 'lucide-react';
